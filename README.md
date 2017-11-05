@@ -1,5 +1,5 @@
 # ruida-laser
-Understaindig the protocol between RDWorks, SDcard, ethernet, and laser.
+Understanding the protocol between RDWorks, usb-stick, ethernet, and laser.
 
 ## References
 
