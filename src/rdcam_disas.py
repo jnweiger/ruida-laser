@@ -2,7 +2,11 @@
 #
 # (c) 2017 Patrick Himmelmann et.al.
 # 2017-05-21
+#
+# (c) 2017-11-24, juergen@fabmail.org
+#
 
+import sys
 
 def end_command(payload):
     data=scramble_bytes(payload)
@@ -52,12 +56,15 @@ def split_messages(d):
 def unscramble_packet(p,checksum=False):
     string=p["_source"]["layers"]["data"]["data.data_raw"]
     if checksum:
-        return list(bytes.fromhex(string[:4]))+unscramble_string(string[4:])
+        return list(bytes.fromhex(string[:4]))+unscramble_hexstring(string[4:])
     else:
-        return unscramble_string(string)
+        return unscramble_hexstring(string)
+
+def unscramble_hexstring(s):
+    return [unscramble(b) for b in bytes.fromhex(s)]
 
 def unscramble_string(s):
-    return [unscramble(b) for b in bytes.fromhex(s)]
+    return [unscramble(b) for b in bytes(s)]
 
 def unscramble(b):
     res_b=b-1
@@ -85,3 +92,7 @@ def scramble_bytes(bs):
     return bytes([scramble(b) for b in bs])
 def unscramble_bytes(bs):
     return bytes([unscramble(b) for b in bs])
+
+if __name__ == '__main__':
+    str = open(sys.argv[1], "rb").read()
+
