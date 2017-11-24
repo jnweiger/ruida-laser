@@ -1,6 +1,4 @@
-                        jw, Fr 16. Jun 10:39:54 CEST 2017
-                        jw, Mo 12. Jun 21:38:39 CEST 2017
-                        jw, Mi 7. Jun 21:47:55 CEST 2017
+                        jw, Mi 8. Nov 23:47:55 CEST 2017
 
 Importieren nach RDworks
 ========================
@@ -60,7 +58,7 @@ seitenverkehrt ist. Prüfen:
 Transport via USB-Stick
 =======================
 
- -> rechts unten (Laser work) SavetoUFile 
+ -> rechts unten (Laser work) [  SavetoUFile  ] 
    -> *.rd      (7 oder 8 Buchstaben sind später sichtbar)
    -> auf USB Stick im Wurzelverzeichnis(!).
    -> Success ->  
@@ -72,9 +70,9 @@ USB-Stick
 
 Tastenfeld
   unten blau: "Datei" drücken.
-  Cursor-Taste-rechts (hoch / runter) "+Udisk" auswählen, [Enter]
+  Cursor-Taste-rechts (hoch / runter) "[  Udisk+  ]" auswählen, [Enter]
 
--> +UDisk [Enter]
+-> [  UDisk  ] [Enter]
 Read UDisk File -> Enter... dauert.
   -> Wähle Datei
  XWING.-~
@@ -111,22 +109,21 @@ Focus Einstellung
 -----------------
 
   Taste Z/U -> [z move] -> erst Cursor-Taste-rechts drücken. (= nach unten)
-  -> zwischen blauer Spitze und Materialoberkante: 6mm Abstand
+  -> zwischen blauer Spitze und Materialoberkante: [  20mm  ] Abstand
      Mit Schlüssellochförmigem Acryl-Teil prüfen.
   -> ESC
 
-Deckel zu, mit beiden Händen.  Reset leuchtet noch rot.
- -> Reset drücken, dann kann man wieder bedienen.
+Deckel zu, Reset drücken. Warnleuchte wird wieder grün.
 
 Startpunkt Einstellung
 ----------------------
 
   -> mit Cursor-Tasten hinfahren
   -> Startposition Taste
-Achtung: Fährt sehr schnell, Blaue Düse ist nur 6mm über dem Material.
+Achtung: Fährt sehr schnell, Blaue Düse ist [  20mm  ] über dem Material.
 Sicher stellen, dass das nirgends kollidiert! 
 Keine Beschwerungseisen für krumme Holzplatten! 
-Es gibt statt dessen 2 flache Magnete, die unter der Düse durchpassen.
+Es gibt statt dessen 3 runde Magnete, die vorne links innen im Laser gelagert werden.
  -> Taste [Box]
    -> Der rote Laserpunkt zeigt, ob alles draufpasst.
 
@@ -146,14 +143,14 @@ Es gibt statt dessen 2 flache Magnete, die unter der Düse durchpassen.
 #    Speed 9999 mm/s, MaxPower1 20%, MinPoer1 8%
 # 
 
--> Air Assist muss laufen! Schalter am Stecker. Immer prüfen! Sonst kaputt!
-   Die Linse darf nie schmutzig werden!
--> Aussengebläse "Elmo" muss an sein. Schalter an der Wand
+-> Air Assist ist eingebaut, läuft immer.
+-> Aussengebläse "Elmo" muss an sein. Schalter an der Wand. Schlauf muss gesteckt sein.
 
 -> "Start/Pause" Taste drücken. 
  -> Laser beginnt.
  -> Uhr läuft inten links im Display mit.
-
+ -> Nach dem Lasern ca. 30 sec warten, bis sich der Rauch verzogen hat.
+ 
 Anmerkungen
 ===========
 
@@ -170,12 +167,9 @@ Prüfungsfragen
  - Wie kann die Düse beschädigt werden?
    * Beim Fokus einstellen?
    * Beim lasern?
- - Wer darf lasern? (Namensliste!)
- - Was tun, wenn 
+ - Wer darf lasern? (Namensliste? Wer Einweisung hatte und eine Kopie dieser Anleitung hat, ...)
+ - Was tun, wenn
    * Ecken oder Kleinteile nicht durch sind?
    * Lange Linien in der Mitte nicht durch sind?
    * Wenn man eine neue Einstellung gefunden hat?
    * Unbekannte Meldungen erscheinen?
- - Man kann händisch bei offener Klappe positionieren. Wie?
-
-
