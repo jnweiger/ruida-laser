@@ -94,5 +94,5 @@ def unscramble_bytes(bs):
     return bytes([unscramble(b) for b in bs])
 
 if __name__ == '__main__':
-    str = open(sys.argv[1], "rb").read()
+    bstr = open(sys.argv[1], "rb").read()
 

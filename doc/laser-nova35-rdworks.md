@@ -1,4 +1,4 @@
-                        jw, Mi 8. Nov 23:47:55 CEST 2017
+                        jw, Sa 25. Nov 20:14:04 CET 2017
 
 Importieren nach RDworks
 ========================
@@ -154,6 +154,26 @@ Es gibt statt dessen 3 runde Magnete, die vorne links innen im Laser gelagert we
 Anmerkungen
 ===========
 
+Wartung
+-------
+Siehe http://www.thunderlaser.com/download/down/User's_manual_for_NOVA35.pdf
+
+DAILY CHECK LIST
+① Check Mirrors and lens for condens ation and make sure it is clean after work
+② Check exhaust grille to ensure there is no blockage for exhaust fan
+③ Check coolant water level
+④ Check air filter on compressor
+⑤ Ensure cooling fans on sides are free from debris
+⑥ The air blower must be checking and cleaning if required.
+
+WEEKLY CHECK LIST
+① Clean filters on water chiller
+② Clean debris from under laser bed
+③ Clean X & Y & Z axis rails and lubricate as required
+④ Clean Acrylic /Tempered glass covers in lid
+⑤ The beam combiner must be checking every weekly, and cleaning if required.
+
+
 Schnittleistung
 ---------------
  Beispiel 10 Bieberschweine ganze Platte 40cm x 30cm, 4mm
@@ -173,3 +193,4 @@ Prüfungsfragen
    * Lange Linien in der Mitte nicht durch sind?
    * Wenn man eine neue Einstellung gefunden hat?
    * Unbekannte Meldungen erscheinen?
+
