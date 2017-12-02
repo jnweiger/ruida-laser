@@ -26,10 +26,8 @@ class Ruida:
     res.reverse()
     return bytes(res)
 
-  def encode_num5(self, num): return self.encode_number(num, 5, 1000)
-  def encode_num2(self, num): return self.encode_number(num, 2, 2000)
-
   def decode_number(self, x):
+    "used with a bytes() array of length 5"
     fak=1
     res=0
     for b in reversed(x):
@@ -37,10 +35,31 @@ class Ruida:
         fak*=0x80
     return 0.0001 * res
 
+  def decode_relcoord(self, x):
+      """
+      using the first two elements of array x
+      relative position in µm; signed (2s complement)
+      """
+      r = x[0] << 8
+      r += x[1]
+      r >>= 1
+      if r > 16383 or r < 0:
+        raise "Not a rel coord"
+      if r > 8182: return 0.001 * (r-16384)
+      else:        return 0.001 * r
 
-if __name__ == '__main__':
+  def encode_percent(self, n):
+      """
+      returns two bytes, used with laser and layer percentages.
+      The magic constant 163.83 is 1/100 of 14bit all 1s.
+      """
+      a = int(n*0x3fff*0.01)    # n* 163.83
+      return bytes([a>>7], [a&0x7f])
+
+
+ __name__ == '__main__':
     rd = Ruida()
-    data = b'\xe7\x51' + rd.encode_num5(452.84) + rd.encode_num5(126.8)
+    data = b'\xe7\x51' + rd.encode_number(452.84) + rd.encode_number(126.8)
     print("Bottom_Right_E7_51 452.84mm 126.8mm           e7 51 00 00 1b 51 68 00 00 07 5e 50 ")
     print("Bottom_Right_E7_51 452.84mm 126.8mm           "+" ".join(["%02x"%b for b in data]))
 

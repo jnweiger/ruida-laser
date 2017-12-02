@@ -1,0 +1,83 @@
+                                                         code              percent
+Laser_1_Min_Pow_C6_31 Layer:1 0%		c6 31 00 01 23           1
+Laser_1_Max_Pow_C6_32 Layer:1 0%		c6 32 00 02 47           2
+Laser_1_Min_Pow_C6_31 Layer:2 1%		c6 31 01 03 6b           3
+Laser_1_Max_Pow_C6_32 Layer:2 0%		c6 32 01 05 0f           4
+Laser_1_Min_Pow_C6_31 Layer:3 0%		c6 31 02 06 33           5
+Laser_1_Max_Pow_C6_32 Layer:3 0%		c6 32 02 07 56           6
+Laser_1_Min_Pow_C6_31 Layer:4 1%		c6 31 03 08 7a           7
+Laser_1_Max_Pow_C6_32 Layer:4 0%		c6 32 03 0a 1e           8
+
+Laser_2_Min_Pow_C6_41 Layer:1 0%		c6 41 00 0b 42           9
+Laser_2_Max_Pow_C6_42 Layer:1 1%		c6 42 00 0c 66          10
+Laser_2_Min_Pow_C6_41 Layer:2 0%		c6 41 01 0e 0a          11
+Laser_2_Max_Pow_C6_42 Layer:2 0%		c6 42 01 0f 2d          12
+Laser_2_Min_Pow_C6_41 Layer:3 0%		c6 41 02 10 51          13
+Laser_2_Max_Pow_C6_42 Layer:3 1%		c6 42 02 11 75          14
+Laser_2_Min_Pow_C6_41 Layer:4 0%		c6 41 03 13 19          15
+Laser_2_Max_Pow_C6_42 Layer:4 0%		c6 42 03 14 3d          16
+
+Laser_3_Min_Pow_C6_35 Layer:1 1%		c6 35 00 15 61          17
+Laser_3_Max_Pow_C6_36 Layer:1 0%		c6 36 00 17 04          18
+Laser_3_Min_Pow_C6_35 Layer:2 0%		c6 35 01 18 28          19
+Laser_3_Max_Pow_C6_36 Layer:2 1%		c6 36 01 19 4c          20
+Laser_3_Min_Pow_C6_35 Layer:3 1%		c6 35 02 1a 70          21
+Laser_3_Max_Pow_C6_36 Layer:3 0%		c6 36 02 1c 14          22
+Laser_3_Min_Pow_C6_35 Layer:4 0%		c6 35 03 1d 38          23
+Laser_3_Max_Pow_C6_36 Layer:4 0%		c6 36 03 1e 5b          24
+
+Laser_4_Min_Pow_C6_37 Layer:1 1%		c6 37 00 1f 7f          25
+Laser_4_Max_Pow_C6_38 Layer:1 0%		c6 38 00 21 23          26
+Laser_4_Min_Pow_C6_37 Layer:2 1%		c6 37 01 22 47          27
+Laser_4_Max_Pow_C6_38 Layer:2 0%		c6 38 01 23 6b          28
+Laser_4_Min_Pow_C6_37 Layer:3 0%		c6 37 02 25 0f          29
+Laser_4_Max_Pow_C6_38 Layer:3 0%		c6 38 02 26 32          30
+Laser_4_Min_Pow_C6_37 Layer:4 1%		c6 37 03 27 56          31
+Laser_4_Max_Pow_C6_38 Layer:4 1%		c6 38 03 28 7a          32
+
+---------------------------------------------------------------------------
+
+Laser_1_Min_Pow_C6_31 Layer:0 1%		c6 31 00 58 28          69
+Laser_1_Max_Pow_C6_32 Layer:0 0%		c6 32 00 59 4c          70
+Laser_2_Min_Pow_C6_41 Layer:0 0%		c6 41 00 5a 6f          71
+Laser_2_Max_Pow_C6_42 Layer:0 0%		c6 42 00 5c 13          72
+Laser_3_Min_Pow_C6_35 Layer:0 1%		c6 35 00 5d 37          73
+Laser_3_Max_Pow_C6_36 Layer:0 0%		c6 36 00 5e 5b          74
+Laser_4_Min_Pow_C6_37 Layer:0 0%		c6 37 00 5f 7f          75
+Laser_4_Max_Pow_C6_38 Layer:0 0%		c6 38 00 61 23          76
+
+Laser_1_Min_Pow_C6_31 Layer:1 0%		c6 31 01 62 46          77
+Laser_1_Max_Pow_C6_32 Layer:1 0%		c6 32 01 63 6a          78
+Laser_2_Min_Pow_C6_41 Layer:1 1%		c6 41 01 65 0e          79
+Laser_2_Max_Pow_C6_42 Layer:1 1%		c6 42 01 66 32          80
+Laser_3_Min_Pow_C6_35 Layer:1 0%		c6 35 01 67 56          81 
+Laser_3_Max_Pow_C6_36 Layer:1 0%		c6 36 01 68 7a          82
+Laser_4_Min_Pow_C6_37 Layer:1 1%		c6 37 01 6a 1d          83
+Laser_4_Max_Pow_C6_38 Layer:1 0%		c6 38 01 6b 41          84
+
+Laser_1_Min_Pow_C6_31 Layer:2 0%		c6 31 02 6c 65          85
+Laser_1_Max_Pow_C6_32 Layer:2 1%		c6 32 02 6e 09          86
+Laser_2_Min_Pow_C6_41 Layer:2 0%		c6 41 02 6f 2d          87
+Laser_2_Max_Pow_C6_42 Layer:2 0%		c6 42 02 70 51          88
+Laser_3_Min_Pow_C6_35 Layer:2 0%		c6 35 02 71 74          89
+Laser_3_Max_Pow_C6_36 Layer:2 1%		c6 36 02 73 18          90
+Laser_4_Min_Pow_C6_37 Layer:2 0%		c6 37 02 74 3c          91
+Laser_4_Max_Pow_C6_38 Layer:2 0%		c6 38 02 75 60          92
+
+Laser_1_Min_Pow_C6_31 Layer:3 1%		c6 31 03 77 04          93
+Laser_1_Max_Pow_C6_32 Layer:3 0%		c6 32 03 78 28          94
+Laser_2_Min_Pow_C6_41 Layer:3 0%		c6 41 03 79 4b          95
+Laser_2_Max_Pow_C6_42 Layer:3 0%		c6 42 03 7a 6f          96
+Laser_3_Min_Pow_C6_35 Layer:3 1%		c6 35 03 7c 13          97
+Laser_3_Max_Pow_C6_36 Layer:3 0%		c6 36 03 7d 37          98
+Laser_4_Min_Pow_C6_37 Layer:3 0%		c6 37 03 7e 5b          99
+Laser_4_Max_Pow_C6_38 Layer:3 0%		c6 38 03 7f 7f         100
+
+Laser_1_Min_Pow_C6_01 1%			c6 01 58 28             69
+Laser_1_Max_Pow_C6_02 0%			c6 02 59 4c             70
+Laser_2_Min_Pow_C6_21 0%			c6 21 5a 6f             71
+Laser_2_Max_Pow_C6_22 0%			c6 22 5c 13             72
+Laser_3_Min_Pow_C6_05 1%			c6 05 5d 37             73
+Laser_3_Max_Pow_C6_06 0%			c6 06 5e 5b             74
+Laser_4_Min_Pow_C6_07 0%			c6 07 5f 7f             75
+Laser_4_Max_Pow_C6_08 0%			c6 08 61 23             76
