@@ -5,43 +5,114 @@
 #
 # (c) 2017-11-24, juergen@fabmail.org
 #
-# encode_number for e.g.:
-# Bottom_Right_E7_51 452.84mm 126.8mm           e7 51 00 00 1b 51 68 00 00 07 5e 50
-# encode_relcoord, encode_percent
+# High level methods:
+#  set(paths=[..], speed=[..], power=[..], ...)
+#  write(fd)
+#
+# Intermediate methods:
+#  header(), body(), trailer()
+#
+# Low level methods:
+#  encode_hex(), encode_relcoord(), encode_percent()
+#  encode_number() for e.g.: # Bottom_Right_E7_51 452.84mm 126.8mm           e7 51 00 00 1b 51 68 00 00 07 5e 50
+#  scramble()
+#
+# Some, but not all unscramble() decode_..() methods are also included.
+# A self test example (cutting the triange in a square) is included at the end.
+#
+# The code is fully compatible with python 2.7 and 3.5
 
 import sys
 
 # python2 has a completely useless alias bytes = str. Fix this:
 if sys.version_info.major < 3:
         def bytes(tupl):
+                "Minimalistic python3 compatible implementation used in python2."
                 return "".join(map(chr, tupl))
-        def hexbytes(data):
-                return ["%02x"%(ord(b) if type(b) == str else b) for b in data]
-else:
-        def hexbytes(data):
-                return ["%02x"%b for b in data]
 
-class Ruida(object):
+class Ruida():
+  """
+   Assemble a valid *.rd file from the following parameters:
 
-  def __init__(self):
+   paths = [
+            [[0,0], [50,0], [50,50], [0,50], [0,0]],
+            [[12,10], [38,25], [12,40], [12,10]]
+           ]
+        This example is a 50 mm square, with a 30 mm triangle inside.
+
+   speed = [ 1000, 30 ]
+        Movement speed in mm/sec. The first value is used with lasers off,
+        when travelling to the next path component.
+        The second value is with laser1 on.
+
+   power = [ 50, 70 ]
+        Values in percent. The first value is the minimum power used near
+        corners or start and end of lines.
+        The second value is the maximum power used in the middle of long
+        straight lines, this compensates for accellerated machine
+        movements.  Additional pairs can be specified for a second, third,
+        and fourth laser.
+
+   bbox = [[0,0], [50,50]]
+        Must contain all points in the paths if specified.
+        Can also be (automatially) computed by the bbox() method.
+        The first point (top left) of the bounding box is ususally [0,0]
+        so that the start position can be easily adjusted at the machine.
+  """
+
+  def __init__(self, paths=None, speed=None, power=None, bbox=None, freq=20.0):
+        self._paths = paths
+
+        self._bbox = bbox
+        self._speed = speed
+        self._power = power
+        self._freq = freq
+
         self._header = None
         self._body = None
         self._trailer = None
 
-  def write(self, fd):
+  def set(self, paths=None, speed=None, power=None, bbox=None, freq=None):
+        if paths is not None: self._paths = paths
+        if speed is not None: self._speed = speed
+        if power is not None: self._power = power
+        if bbox  is not None: self._bbox  = bbox
+        if freq  is not None: self._freq  = freq
+
+  def write(self, fd, scramble=True):
         """
-        Write a fully initialzed RD object scrambled into a file.
+        Write a fully prepared object into a file (or raise ValueError()s
+        for missing attributes). The object must be prepared by passing
+        parameters to __init__ or set().
+
         The filedescriptor should be opened in "wb" mode.
+
+        The file format is normally scrambled. Files written with
+        scramble=False are not understood by the machine, but may be
+        helpful for debugging.
         """
-        if not self._header:  raise ValueError("header() not initialized")
-        if not self._body:    raise ValueError("body() not initialized")
+
+        if not self._header:
+                if not self._freq: self._freq = 20.0    # kHz   (unused?)
+                if not self._bbox and self._paths: self._bbox = self.bbox(self._paths)
+                if self._bbox and self._speed and self._power and self._freq:
+                        self._header = self.header(self._bbox, self._speed, self._power, self._freq)
+        if not self._body:
+                if self._paths:
+                        self._body = self.body(self._paths)
+        if not self._trailer: self._trailer = self.trailer()
+
+        if not self._header:  raise ValueError("header(_bbox,_speed,_power,_freq) not initialized")
+        if not self._body:    raise ValueError("body(_paths) not initialized")
         if not self._trailer: raise ValueError("trailer() not initialized")
+
         contents = self._header + self._body + self._trailer
-        fd.write(self.scramble_bytes(contents))
+        if scramble: contents = self.scramble_bytes(contents)
+        fd.write(contents)
 
   def scramble_bytes(self, data):
     if sys.version_info.major < 3:
-        return bytes([self.scramble(ord(b)) for b in data]
+        return bytes([self.scramble(ord(b)) for b in data])
     else:
         return bytes([self.scramble(b) for b in data])
 
@@ -77,13 +148,18 @@ class Ruida(object):
 
   def header(self, bbox, speed, power, freq):
         """
-        Initialize header data. The bounding box bbox is expected in [xmin, xmax, ymin, ymax] format, as returned by
-        the boundingbox() method. Note: all test data seen had xmin=0, ymin=0.
+        Initialize header data. The bounding box bbox is expected in 
+        [xmin, xmax, ymin, ymax] format, as returned by the bbox() 
+        method. Note: all test data seen had xmin=0, ymin=0.
 
-        The power is expected as list of 2 to 8 elements, [min1, max1, ...] missing elements are added by repetition.
-        Only one (implicit) layer is currently initialized, to be used for all data.
-        All lengths in mm, power in percent [0..100], speed in mm/sec, freq in khz.
+        The power is expected as list of 2 to 8 elements, [min1, max1, ...]
+        missing elements are added by repetition.
+        Only one layer is currently initialized and used for all data.
+
+        Units: Lengths in mm, power in percent [0..100],
+               speed in mm/sec, freq in khz.
         """
+
         if len(power) % 2: raise ValueError("Even number of elements needed in power[]")
         while len(power) < 8: power += power[-2:]
         xmin = bbox[0]
@@ -104,10 +180,10 @@ class Ruida(object):
         self._header += self.enc('-nn', ["e7 04 00 01 00 01", 0, 0])  # E7 04 ???
         self._header += self.enc('-n',  ["e7 05 00 c9 04 00", speed]) # Speed_E7_05
 
-        self._header += self.enc('-p-p', ["c6 31 00", power[0], "c6 32 00", power[1]) # Laser_1_Min/Max_Pow Layer:0
-        self._header += self.enc('-p-p', ["c6 41 00", power[2], "c6 42 00", power[3]) # Laser_2_Min/Max_Pow Layer:0
-        self._header += self.enc('-p-p', ["c6 35 00", power[4], "c6 36 00", power[5]) # Laser_3_Min/Max_Pow Layer:0
-        self._header += self.enc('-p-p', ["c6 37 00", power[6], "c6 38 00", power[7]) # Laser_3_Min/Max_Pow Layer:0
+        self._header += self.enc('-p-p', ["c6 31 00", power[0], "c6 32 00", power[1]]) # Laser_1_Min/Max_Pow Layer:0
+        self._header += self.enc('-p-p', ["c6 41 00", power[2], "c6 42 00", power[3]]) # Laser_2_Min/Max_Pow Layer:0
+        self._header += self.enc('-p-p', ["c6 35 00", power[4], "c6 36 00", power[5]]) # Laser_3_Min/Max_Pow Layer:0
+        self._header += self.enc('-p-p', ["c6 37 00", power[6], "c6 38 00", power[7]]) # Laser_3_Min/Max_Pow Layer:0
         self._header += self.enc('-nn-nn-nn-nn-', ["""
                 ca 06 00 00 00 00 00 00         # Layer_CA_06 Layer:0 00 00 00 00 00
                 ca 41 00 00                     # ??
@@ -169,7 +245,8 @@ class Ruida(object):
 
   def trailer(self, l=0.092):
         """
-        Initialize a trailer with default Sew_Comp_Half length of 0.092 mm. Whatever that means.
+        Initialize a trailer with default Sew_Comp_Half length of 0.092 mm.
+        Whatever that means.
         """
         self._trailer = self.enc("-nn-", ["""
                 eb e7 00
@@ -179,7 +256,9 @@ class Ruida(object):
   def encode_number(self, num, length=5, scale=1000):
     """
     The number n is expected in floating point format with unit mm.
-    A bytes() array of size length is returned scaled up (to micrometers with scale=1000).
+    A bytes() array of size length is returned. 
+    The default scale converts to micrometers.
+    length=5 and scale=1000 are the expected machine format.
     """
     res = []
     nn = int(num * scale)
@@ -194,7 +273,8 @@ class Ruida(object):
   def enc(self, fmt, tupl):
     """
       Encode the elements of tupl according to the format string.
-      Each character in fmt consumes the corresponds element from tupl as a parameter to an encoding method:
+      Each character in fmt consumes the corresponds element from tupl
+      as a parameter to an encoding method:
       '-'       encode_hex()
       'n'       encode_number()
       'p'       encode_percent()
@@ -204,10 +284,10 @@ class Ruida(object):
 
     ret = b''
     for i in range(len(fmt)):
-        if      fmt[i] == '-': ret += self.encode_hex(tupl[i])
-        else if fmt[i] == 'n': ret += self.encode_number(tupl[i])
-        else if fmt[i] == 'p': ret += self.encode_percent(tupl[i])
-        else if fmt[i] == 'r': ret += self.encode_relcoord(tupl[i])
+        if   fmt[i] == '-': ret += self.encode_hex(tupl[i])
+        elif fmt[i] == 'n': ret += self.encode_number(tupl[i])
+        elif fmt[i] == 'p': ret += self.encode_percent(tupl[i])
+        elif fmt[i] == 'r': ret += self.encode_relcoord(tupl[i])
         else: raise ValueError("unknown character in fmt: "+fmt)
     return ret
 
@@ -263,23 +343,27 @@ class Ruida(object):
       return bytes(l)
 
 if __name__ == '__main__':
+    def hexdumpb(data):
+        "Convenience hexdumper for bytes (or str), compatible with both python2 and python3"
+        return ["%02x"%(ord(b) if type(b) == str else b) for b in data]
+
     rd = Ruida()
     data = b'\xe7\x51' + rd.encode_number(452.84) + rd.encode_number(126.8)
     print("Bottom_Right_E7_51 452.84mm 126.8mm           e7 51 00 00 1b 51 68 00 00 07 5e 50 ")
-    print("Bottom_Right_E7_51 452.84mm 126.8mm           "+" ".join(hexbytes(data)))
+    print("Bottom_Right_E7_51 452.84mm 126.8mm           "+" ".join(hexdumpb(data)))
 
     data = b'\xa9' + rd.encode_relcoord(-0.982) + rd.encode_relcoord(0.011)
     print("Cut_Rel -0.982mm 0.011mm                        a9 78 55 00 16")
-    print("Cut_Rel -0.982mm 0.011mm                        "+" ".join(hexbytes(data)))
+    print("Cut_Rel -0.982mm 0.011mm                        "+" ".join(hexdumpb(data)))
 
     data = b'\xa9' + rd.encode_relcoord(-0.075) + rd.encode_relcoord(0.917)
     print("Cut_Rel -0.075mm 0.917mm                        a9 7f 6a 07 2b")
-    print("Cut_Rel -0.075mm 0.917mm                        "+" ".join(hexbytes(data)))
+    print("Cut_Rel -0.075mm 0.917mm                        "+" ".join(hexdumpb(data)))
 
     data = b'\xc6\x31\x00' + rd.encode_percent(60)
     print("Laser_1_Min_Pow_C6_31 Layer:0 0%		c6 31 00 4c 65")
-    print("Laser_1_Min_Pow_C6_31 Layer:0 0%		"+" ".join(hexbytes(data)))
+    print("Laser_1_Min_Pow_C6_31 Layer:0 0%		"+" ".join(hexdumpb(data)))
 
     data = b'\xc6\x32\x00' + rd.encode_percent(70)
     print("Laser_1_Max_Pow_C6_32 Layer:0 0%		c6 32 00 59 4c")
-    print("Laser_1_Max_Pow_C6_32 Layer:0 0%		"+" ".join(hexbytes(data)))
+    print("Laser_1_Max_Pow_C6_32 Layer:0 0%		"+" ".join(hexdumpb(data)))
