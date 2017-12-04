@@ -139,10 +139,16 @@ class Ruida():
         if point[1] < ymin: ymin = point[1]
     return [[xmin, ymin], [xmax, ymax]]
 
-  def body(self, paths, maxrel=5.0):
+  def body(self, paths, maxrel=-5.0):
     """
     Convert a set of paths into lasercut instructions.
     Returns the binary instruction data.
+
+    maxrel is the limit in mm, for relative moves and cuts.
+    The theoretical limit is assumed to be between 5 and 10 mm,
+
+    FIXME: As of 2017-12-04 the encoding of enc('r', ...) is broken.
+           We always use absolute moves and cuts.
     """
 
     def relok(last, point, maxrel):
@@ -385,8 +391,10 @@ class Ruida():
 
   def encode_relcoord(self, n):
     """
-    relative position in mm;
+    Relative position in mm;
     Returns a bytes array of two elements.
+
+    FIXME: As of 2017-12-04 this encoding is broken. Do not use.
     """
     nn = int(n*1000)
     if nn > 8192 or nn < -8191:
@@ -451,8 +459,21 @@ if __name__ == '__main__':
   print("Laser_1_Max_Pow_C6_32 Layer:0 0%             c6 32 00 59 4c")
   print("Laser_1_Max_Pow_C6_32 Layer:0 0%             "+" ".join(hexdumpb(data)))
 
-  rd.set(speed=30, power=[40,70])
-  rd.set(paths=[ [[0,0], [50,0], [50,50], [0,50], [0,0]], [[12,10], [38,25], [12,40], [12,10]], [[16,6], [10,6], [13,3], [16, 6]] ])
+
+
+
+
+  rd = Ruida()
+  # rd.set(speed=30, power=[40,70])             # cut 4mm plywood
+  rd.set(speed=100, power=[10,15])              # mark
+  rd.set(paths=[
+        [[0,0], [50,0], [50,50], [0,50], [0,0]],
+#        [[12,10], [38,25], [12,40], [12,10]],
+#        [[16,6], [10,6], [13,3], [16, 6]]
+        [[12,10], [38,25], [12,40], [12,11]],
+        [[15,6], [10,6], [13,3], [16, 6]]
+      ])
+
   with open('square_tri_test.rd', 'wb') as fd:
     rd.write(fd)
 
