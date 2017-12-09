@@ -26,7 +26,7 @@
 #     v1.0 -- The test code produces a valid square_tri_test.rd, according to
 #             githb.com/kkaempf/rudida/bin/decode
 
-import sys, re
+import sys, re, math
 
 # python2 has a completely useless alias bytes = str. Fix this:
 if sys.version_info.major < 3:
@@ -69,7 +69,7 @@ class Ruida():
         adjusted at the machine.
   """
 
-  __version__ = "1.0"
+  __version__ = "1.1"
 
   def __init__(self, paths=None, speed=None, power=None, bbox=None, freq=20.0):
     self._paths = paths
@@ -79,16 +79,19 @@ class Ruida():
     self._power = power
     self._freq = freq
 
+    self._odo = None
+
     self._header = None
     self._body = None
     self._trailer = None
 
-  def set(self, paths=None, speed=None, power=None, bbox=None, freq=None):
+  def set(self, paths=None, speed=None, power=None, bbox=None, freq=None, odo=None):
     if paths is not None: self._paths = paths
     if speed is not None: self._speed = speed
     if power is not None: self._power = power
     if bbox  is not None: self._bbox  = bbox
     if freq  is not None: self._freq  = freq
+    if odo   is not None: self._odo   = odo
 
   def write(self, fd, scramble=True):
     """
@@ -111,7 +114,10 @@ class Ruida():
     if not self._body:
       if self._paths:
         self._body = self.body(self._paths)
-    if not self._trailer: self._trailer = self.trailer()
+    if not self._odo:
+      if self._paths:
+        self._odo = self.odometer(self._paths)
+    if not self._trailer: self._trailer = self.trailer(self._odo)
 
     if not self._header:  raise ValueError("header(_bbox,_speed,_power,_freq) not initialized")
     if not self._body:    raise ValueError("body(_paths) not initialized")
@@ -120,6 +126,37 @@ class Ruida():
     contents = self._header + self._body + self._trailer
     if scramble: contents = self.scramble_bytes(contents)
     fd.write(contents)
+
+  def odometer(self, paths=None, init=[0,0], return_home=False):
+    """
+    Returns a list of two values: [ cut_distance, travel_distance ]
+    Note that these distances are subject to path ordering.
+    Call this after all optimizations.
+    """
+    if paths is None: paths = self._paths
+    if paths is None: raise ValueError("no paths")
+
+    def dist_xy(p1, p2):
+      dx = p2[0] - p1[0]
+      dy = p2[1] - p1[1]
+      return math.sqrt(dx*dx+dy*dy)
+
+    cut_d = 0
+    trav_d = 0
+    xy = init
+    for path in paths:
+      traveling=True
+      for point in path:
+        if traveling:
+          trav_d += dist_xy(xy, point)
+          xy = point
+          traveling = False
+        else:
+          cut_d += dist_xy(xy, point)
+          xy = point
+    if return_home:
+      trav_d += dist_xy(xy, init)
+    return [ cut_d, trav_d ]
 
   def boundingbox(self, paths=None):
     """
@@ -139,7 +176,7 @@ class Ruida():
         if point[1] < ymin: ymin = point[1]
     return [[xmin, ymin], [xmax, ymax]]
 
-  def body(self, paths, maxrel=-5.0):
+  def body(self, paths, maxrel=-5.0):           # a negative maxrel value forces all absolute movements.
     """
     Convert a set of paths into lasercut instructions.
     Returns the binary instruction data.
@@ -326,18 +363,19 @@ class Ruida():
     return data
 
 
-  def trailer(self, l=0.092):
+  def trailer(self, odo=[0.0, 0.0]):
     """
     Generate machine trailer instructions. To be sent after geometry instructions.
 
-    Initialize a trailer with default Sew_Comp_Half length of 0.092 mm.
-    Whatever that means.
+    Initialize a trailer with the cut distance in m, not mm.
+    Note, that RDworks8 uses the cut distance twice here, and does not send the
+    the travel distance. Is this a bug?
 
     Returns the binary instruction data.
     """
     data = self.enc("-nn-", ["""
         eb e7 00
-        da 01 06 20""", l, l, """
+        da 01 06 20""", odo[0]*0.001, odo[0]*0.001, """
         d7 """])
     return data
 
@@ -468,10 +506,10 @@ if __name__ == '__main__':
   rd.set(speed=100, power=[10,15])              # mark
   rd.set(paths=[
         [[0,0], [50,0], [50,50], [0,50], [0,0]],
-#        [[12,10], [38,25], [12,40], [12,10]],
-#        [[16,6], [10,6], [13,3], [16, 6]]
-        [[12,10], [38,25], [12,40], [12,11]],
-        [[15,6], [10,6], [13,3], [16, 6]]
+        [[12,10], [38,25], [12,40], [12,10]],
+        [[16,6], [10,6], [13,3], [16, 6]]
+#        [[12,10], [38,25], [12,40], [12,11]],
+#        [[15,6], [10,6], [13,3], [16, 6]]
       ])
 
   with open('square_tri_test.rd', 'wb') as fd:
