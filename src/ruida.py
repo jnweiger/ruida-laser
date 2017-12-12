@@ -28,7 +28,8 @@
 # 2017-12-12, jw@fabmail.org
 #     v1.2 -- Correct maxrel 8.191 found. 
 #             Implemented Cut_Horiz, Cut_Vert, Move_Horiz, Move_Vert
-#
+#             Updated encode_relcoord() to use encode_number(2)
+
 import sys, re, math
 
 # python2 has a completely useless alias bytes = str. Fix this:
