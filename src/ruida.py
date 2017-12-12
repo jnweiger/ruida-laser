@@ -25,7 +25,10 @@
 # 2017-12-03, jw@fabmail.org
 #     v1.0 -- The test code produces a valid square_tri_test.rd, according to
 #             githb.com/kkaempf/rudida/bin/decode
-
+# 2017-12-12, jw@fabmail.org
+#     v1.2 -- Correct maxrel 8.191 found. 
+#             Implemented Cut_Horiz, Cut_Vert, Move_Horiz, Move_Vert
+#
 import sys, re, math
 
 # python2 has a completely useless alias bytes = str. Fix this:
@@ -69,7 +72,7 @@ class Ruida():
         adjusted at the machine.
   """
 
-  __version__ = "1.1"
+  __version__ = "1.2"
 
   def __init__(self, paths=None, speed=None, power=None, bbox=None, freq=20.0):
     self._paths = paths
@@ -176,7 +179,7 @@ class Ruida():
         if point[1] < ymin: ymin = point[1]
     return [[xmin, ymin], [xmax, ymax]]
 
-  def body(self, paths, maxrel=-5.0):           # a negative maxrel value forces all absolute movements.
+  def body(self, paths, maxrel=8.191):           # 8.191 encodes as 3f 7f. A negative maxrel value forces all absolute movements.
     """
     Convert a set of paths into lasercut instructions.
     Returns the binary instruction data.
@@ -207,10 +210,21 @@ class Ruida():
       for p in path:
         if relok(lp, p, maxrel):
 
-          if travel:
-            data += self.enc('-rr', ['89', p[0]-lp[0], p[1]-lp[1]])   # Move_To_Rel 3.091mm 0.025mm
-          else:
-            data += self.enc('-rr', ['a9', p[0]-lp[0], p[1]-lp[1]])   # Cut_Rel 0.015mm -1.127mm
+          if p[1] == lp[1]:     # horizontal rel
+            if travel:
+              data += self.enc('-r', ['8a', p[0]-lp[0]])   # Move_Horiz 6.213mm
+            else:
+              data += self.enc('-r', ['aa', p[0]-lp[0]])   # Cut_Horiz -6.008mm
+          elif p[0] == lp[0]:   # vertical rel
+            if travel:
+              data += self.enc('-r', ['8b', p[1]-lp[1]])   # Move_Vert 17.1mm
+            else:
+              data += self.enc('-r', ['ab', p[1]-lp[1]])   # Cut_Vert 2.987mm
+          else:                 # other rel
+            if travel:
+              data += self.enc('-rr', ['89', p[0]-lp[0], p[1]-lp[1]])   # Move_To_Rel 3.091mm 0.025mm
+            else:
+              data += self.enc('-rr', ['a9', p[0]-lp[0], p[1]-lp[1]])   # Cut_Rel 0.015mm -1.127mm
 
         else:
 
@@ -514,4 +528,5 @@ if __name__ == '__main__':
 
   with open('square_tri_test.rd', 'wb') as fd:
     rd.write(fd)
+    print("square_tri_test.rd: odometer: ", rd._odo)
 
