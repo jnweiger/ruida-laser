@@ -445,15 +445,12 @@ class Ruida():
     """
     Relative position in mm;
     Returns a bytes array of two elements.
-
-    FIXME: As of 2017-12-04 this encoding is broken. Do not use.
     """
     nn = int(n*1000)
-    if nn > 8192 or nn < -8191:
+    if nn > 8191 or nn < -8191:
       raise ValueError("relcoord "+str(n)+" mm is out of range. Use abscoords!")
     if nn < 0: nn += 16384
-    nn <<= 1
-    return bytes([nn>>8, nn&0xff])    # 8-bit encoding with lost lsb.
+    return self.encode_number(nn, length=2, scale=1)
 
   def decode_relcoord(self, x):
     """
@@ -462,10 +459,9 @@ class Ruida():
     """
     r = x[0] << 8
     r += x[1]
-    r >>= 1
     if r > 16383 or r < 0:
       raise ValueError("Not a rel coord: " + repr(x[0:2]))
-    if r > 8192: return 0.001 * (r-16384)
+    if r > 8191: return 0.001 * (r-16384)
     else:        return 0.001 * r
 
   def encode_percent(self, n):
@@ -495,14 +491,6 @@ if __name__ == '__main__':
   print("Bottom_Right_E7_51 452.84mm 126.8mm          e7 51 00 00 1b 51 68 00 00 07 5e 50 ")
   print("Bottom_Right_E7_51 452.84mm 126.8mm          "+" ".join(hexdumpb(data)))
 
-  data = b'\xa9' + rd.encode_relcoord(-0.982) + rd.encode_relcoord(0.011)
-  print("Cut_Rel -0.982mm 0.011mm                     a9 78 55 00 16")
-  print("Cut_Rel -0.982mm 0.011mm                     "+" ".join(hexdumpb(data)))
-
-  data = b'\xa9' + rd.encode_relcoord(-0.075) + rd.encode_relcoord(0.917)
-  print("Cut_Rel -0.075mm 0.917mm                     a9 7f 6a 07 2b")
-  print("Cut_Rel -0.075mm 0.917mm                     "+" ".join(hexdumpb(data)))
-
   data = b'\xc6\x31\x00' + rd.encode_percent(60)
   print("Laser_1_Min_Pow_C6_31 Layer:0 0%             c6 31 00 4c 65")
   print("Laser_1_Min_Pow_C6_31 Layer:0 0%             "+" ".join(hexdumpb(data)))
@@ -511,8 +499,13 @@ if __name__ == '__main__':
   print("Laser_1_Max_Pow_C6_32 Layer:0 0%             c6 32 00 59 4c")
   print("Laser_1_Max_Pow_C6_32 Layer:0 0%             "+" ".join(hexdumpb(data)))
 
+  data = b'\xa9' + rd.encode_relcoord(-8.191) + rd.encode_relcoord(8.191)
+  print("Cut_Rel -8.191mm 8.191mm                     a9 40 01 3f 7f")
+  print("Cut_Rel -8.191mm 8.191mm                     "+" ".join(hexdumpb(data)))
 
-
+  data = b'\x89' + rd.encode_relcoord(4.0) + rd.encode_relcoord(-4.0)
+  print("Mov_Rel 4.0mm -4.0mm                         89 1f 20 60 60")
+  print("Mov_Rel 4.0mm -4.0mm                         "+" ".join(hexdumpb(data)))
 
 
   rd = Ruida()
