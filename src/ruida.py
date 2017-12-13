@@ -25,10 +25,12 @@
 # 2017-12-03, jw@fabmail.org
 #     v1.0 -- The test code produces a valid square_tri_test.rd, according to
 #             githb.com/kkaempf/rudida/bin/decode
-# 2017-12-12, jw@fabmail.org
-#     v1.2 -- Correct maxrel 8.191 found. 
+# 2017-12-11, jw@fabmail.org
+#     v1.2 -- Correct maxrel 8.191 found.
 #             Implemented Cut_Horiz, Cut_Vert, Move_Horiz, Move_Vert
 #             Updated encode_relcoord() to use encode_number(2)
+# 2017-12-13, jw@fabmail.org
+#     v1.3 -- added _forceabs = 100. Limit possible precision loss.
 
 import sys, re, math
 
@@ -73,7 +75,7 @@ class Ruida():
         adjusted at the machine.
   """
 
-  __version__ = "1.2"
+  __version__ = "1.3"
 
   def __init__(self, paths=None, speed=None, power=None, bbox=None, freq=20.0):
     self._paths = paths
@@ -89,13 +91,25 @@ class Ruida():
     self._body = None
     self._trailer = None
 
-  def set(self, paths=None, speed=None, power=None, bbox=None, freq=None, odo=None):
-    if paths is not None: self._paths = paths
-    if speed is not None: self._speed = speed
-    if power is not None: self._power = power
-    if bbox  is not None: self._bbox  = bbox
-    if freq  is not None: self._freq  = freq
-    if odo   is not None: self._odo   = odo
+    # Must do an absolute mov/cut every now and then to avoid precision loss.
+    # Worst case estimation: A deviation of 0.1mm is acceptable, this is circa the
+    # diameter of the laser beam. Precision loss can occur due to rounding of the last decimal,
+    # Which can contribute less than 0.001 mm each time. Thus a helpful value should be around
+    # 100. We want the value as high as possible to safe code size, but slow enough to keep the
+    # precision loss invisible.
+    #
+    # Set to 1, to disable relative moves.
+    # Set to 0, to never force an absolute move. Allows potentially infinite precision loss.
+    self._forceabs = 100
+
+  def set(self, paths=None, speed=None, power=None, bbox=None, freq=None, odo=None, forceabs=None):
+    if forceabs is not None: self._forceabs = forceabs
+    if paths    is not None: self._paths    = paths
+    if speed    is not None: self._speed    = speed
+    if power    is not None: self._power    = power
+    if bbox     is not None: self._bbox     = bbox
+    if freq     is not None: self._freq     = freq
+    if odo      is not None: self._odo      = odo
 
   def write(self, fd, scramble=True):
     """
@@ -180,7 +194,7 @@ class Ruida():
         if point[1] < ymin: ymin = point[1]
     return [[xmin, ymin], [xmax, ymax]]
 
-  def body(self, paths, maxrel=8.191):           # 8.191 encodes as 3f 7f. A negative maxrel value forces all absolute movements.
+  def body(self, paths):
     """
     Convert a set of paths into lasercut instructions.
     Returns the binary instruction data.
@@ -192,24 +206,29 @@ class Ruida():
            We always use absolute moves and cuts.
     """
 
-    def relok(last, point, maxrel):
+    def relok(last, point):
       """
       Determine, if we can emit a relative move or cut command.
       An absolute move or cut costs 11 bytes,
       a relative one costs 5 bytes.
       """
+      maxrel = 8.191     # 8.191 encodes as 3f 7f. -8.191 encodes as 40 01
+
       if last is None: return False
       dx = abs(point[0]-last[0])
       dy = abs(point[1]-last[1])
       return max(dx, dy) <= maxrel
 
     data = bytes([])
+    relcounter = 0
 
     lp = None
     for path in paths:
       travel = True
       for p in path:
-        if relok(lp, p, maxrel):
+        if relok(lp, p) and (self._forceabs == 0 or relcounter < self._forceabs):
+
+          if self._forceabs > 0: relcounter += 1
 
           if p[1] == lp[1]:     # horizontal rel
             if travel:
@@ -228,6 +247,8 @@ class Ruida():
               data += self.enc('-rr', ['a9', p[0]-lp[0], p[1]-lp[1]])   # Cut_Rel 0.015mm -1.127mm
 
         else:
+
+          relcounter = 0
 
           if travel:
             data += self.enc('-nn', ['88', p[0], p[1]])               # Move_To_Abs 0.0mm 0.0mm
@@ -512,13 +533,13 @@ if __name__ == '__main__':
   rd = Ruida()
   # rd.set(speed=30, power=[40,70])             # cut 4mm plywood
   rd.set(speed=100, power=[10,15])              # mark
-  rd.set(paths=[
+  paths=[
         [[0,0], [50,0], [50,50], [0,50], [0,0]],
         [[12,10], [38,25], [12,40], [12,10]],
         [[16,6], [10,6], [13,3], [16, 6]]
-#        [[12,10], [38,25], [12,40], [12,11]],
-#        [[15,6], [10,6], [13,3], [16, 6]]
-      ])
+      ]
+#  for x in range(17,333): paths[-1].append([x,x-10])
+  rd.set(paths=paths, forceabs=10)
 
   with open('square_tri_test.rd', 'wb') as fd:
     rd.write(fd)
