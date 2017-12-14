@@ -31,6 +31,8 @@
 #             Updated encode_relcoord() to use encode_number(2)
 # 2017-12-13, jw@fabmail.org
 #     v1.3 -- added _forceabs = 100. Limit possible precision loss.
+# 2017-12-14, jw@fabmail.org
+#     v1.4 -- added bbox2moves() and paths2moves()
 
 import sys, re, math
 
@@ -75,7 +77,7 @@ class Ruida():
         adjusted at the machine.
   """
 
-  __version__ = "1.3"
+  __version__ = "1.4"
 
   def __init__(self, paths=None, speed=None, power=None, bbox=None, freq=20.0):
     self._paths = paths
@@ -176,9 +178,23 @@ class Ruida():
       trav_d += dist_xy(xy, init)
     return [ cut_d, trav_d ]
 
+  def paths2moves(self, paths=None):
+    """
+    Returns a list of one-element-lists, each point in any of the
+    sub-paths as a its own list. This is technique generates
+    only move instructions in the rd output (laser inactive).
+    """
+    if paths is None: paths = self._paths
+    if paths is None: raise ValueError("no paths")
+    moves = []
+    for path in paths:
+      for point in path:
+        moves.append([[point[0], point[1]]])
+    return moves
+
   def boundingbox(self, paths=None):
     """
-    Returns a list of two pairs [xmin, ymin], [xmax, ymax]]
+    Returns a list of two pairs [[xmin, ymin], [xmax, ymax]]
     that spans the rectangle containing all points found in paths.
     If no parameter is given, the _paths of the object are examined.
     """
@@ -193,6 +209,16 @@ class Ruida():
         if point[1] > ymax: ymax = point[1]
         if point[1] < ymin: ymin = point[1]
     return [[xmin, ymin], [xmax, ymax]]
+
+  def bbox2moves(self, bbox):
+    """
+    bbox = [[x0, y0], [x1, y1]]
+    """
+    x0 = bbox[0][0]
+    y0 = bbox[0][1]
+    x1 = bbox[1][0]
+    y1 = bbox[1][1]
+    return [[[x0,y0]], [[x1,y0]], [[x1,y1]], [[x0,y1]], [[x0, y0]]]
 
   def body(self, paths):
     """
@@ -538,6 +564,23 @@ if __name__ == '__main__':
         [[12,10], [38,25], [12,40], [12,10]],
         [[16,6], [10,6], [13,3], [16, 6]]
       ]
+  mvpath = rd.paths2moves(paths)
+  mvbbox = rd.bbox2moves(rd.boundingbox(paths))
+
+  mvbbox_cmp = [
+        [[0,0]], [[50,0]], [[50,50]], [[0,50]], [[0,0]],
+      ]
+  mvpath_cmp = [
+        [[0,0]], [[50,0]], [[50,50]], [[0,50]], [[0,0]],
+        [[12,10]], [[38,25]], [[12,40]], [[12,10]],
+        [[16,6]], [[10,6]], [[13,3]], [[16, 6]]
+      ]
+  print("bbox comparison: ", mvbbox_cmp)
+  print("rd.bbox2moves(): ", mvbbox)
+
+  print("mvpath comparison: ", mvpath_cmp)
+  print("rd.paths2moves():  ", mvpath)
+
 #  for x in range(17,333): paths[-1].append([x,x-10])
   rd.set(paths=paths, forceabs=10)
 
