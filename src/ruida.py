@@ -33,8 +33,10 @@
 #     v1.3 -- added _forceabs = 100. Limit possible precision loss.
 # 2017-12-14, jw@fabmail.org
 #     v1.4 -- added bbox2moves() and paths2moves()
+# 2017-12-16, jw@fabmail.org
+#     v1.5 -- added support for multiple layer
 
-import sys, re, math
+import sys, re, math, copy
 
 # python2 has a completely useless alias bytes = str. Fix this:
 if sys.version_info.major < 3:
@@ -42,10 +44,31 @@ if sys.version_info.major < 3:
                 "Minimalistic python3 compatible implementation used in python2."
                 return "".join(map(chr, tupl))
 
+class RuidaLayer():
+  """
+  """
+  def __init__(self, paths=None, speed=None, power=None, bbox=None, color=[0,0,0], freq=20.0):
+    self._paths = paths
+
+    self._bbox  = bbox
+    self._speed = speed
+    self._power = power
+    self._color = color
+    self._freq  = freq
+
+  def set(self, paths=None, speed=None, power=None, bbox=None, color=None, freq=None):
+    if paths is not None: self._paths = paths
+    if speed is not None: self._speed = speed
+    if power is not None: self._power = power
+    if bbox  is not None: self._bbox  = bbox
+    if color is not None: self._color = color
+    if freq  is not None: self._freq  = freq
+
+
 
 class Ruida():
   """
-   Assemble a valid *.rd file from the following parameters:
+   Assemble a valid *.rd file with multiple layers. Each layer has the following parameters:
 
    paths = [
             [[0,0], [50,0], [50,50], [0,50], [0,0]],
@@ -75,17 +98,17 @@ class Ruida():
         The first point ([xmin, ymin] aka "top left") of the bounding
         box is ususally [0,0] so that the start position can be easily
         adjusted at the machine.
+
+   color = [0,255,0]
+        Give a display color for the layer. This is used in the preview
+        to visualize different layers in different colors.
   """
 
-  __version__ = "1.4"
+  __version__ = "1.5"
 
-  def __init__(self, paths=None, speed=None, power=None, bbox=None, freq=20.0):
-    self._paths = paths
-
-    self._bbox = bbox
-    self._speed = speed
-    self._power = power
-    self._freq = freq
+  def __init__(self, layers=None):
+    if layers is None: layers = []
+    self._layers = layers
 
     self._odo = None
 
@@ -104,14 +127,27 @@ class Ruida():
     # Set to 0, to never force an absolute move. Allows potentially infinite precision loss.
     self._forceabs = 100
 
-  def set(self, paths=None, speed=None, power=None, bbox=None, freq=None, odo=None, forceabs=None):
+  def addLayer(self, layer):
+    self._layers.append(layer)
+
+  def set(self, nlayers=None, layer=0, paths=None, speed=None, power=None, bbox=None, freq=None, odo=None, color=None, forceabs=None):
     if forceabs is not None: self._forceabs = forceabs
-    if paths    is not None: self._paths    = paths
-    if speed    is not None: self._speed    = speed
-    if power    is not None: self._power    = power
     if bbox     is not None: self._bbox     = bbox
-    if freq     is not None: self._freq     = freq
     if odo      is not None: self._odo      = odo
+ 
+    if layer >= len(self._layers): nlayers = layer+1
+
+    if nlayers  is not None:
+      if nlayers < len(self._layers): self._layers = self._layers[0:nlayers]
+      while nlayers > len(self._layers): self.addLayer(RuidaLayer())
+
+    if paths is not None: self._layers[layer].set(paths = paths)
+    if speed is not None: self._layers[layer].set(speed = speed)
+    if power is not None: self._layers[layer].set(power = power)
+    if bbox  is not None: self._layers[layer].set(bbox  = bbox)
+    if freq  is not None: self._layers[layer].set(freq  = freq)
+    if color is not None: self._layers[layer].set(color = color)
+
 
   def write(self, fd, scramble=True):
     """
@@ -127,20 +163,21 @@ class Ruida():
     """
 
     if not self._header:
-      if not self._freq: self._freq = 20.0    # kHz   (unused?)
-      if not self._bbox and self._paths: self._bbox = self.boundingbox(self._paths)
-      if self._bbox and self._speed and self._power and self._freq:
-        self._header = self.header(self._bbox, self._speed, self._power, self._freq)
+      if self._layers:
+        for l in self._layers[0:1]:
+          if not l._bbox and l._paths: l._bbox = self.boundingbox(l._paths)
+          self._header = self.header(l._bbox, l._speed, l._power, l._freq)
     if not self._body:
-      if self._paths:
-        self._body = self.body(self._paths)
+      if self._layers:
+        self._body = self.body(self._layers)
     if not self._odo:
-      if self._paths:
-        self._odo = self.odometer(self._paths)
+      if self._layers:
+        for l in self._layers:
+          self.odoAdd(self.odometer(l._paths))
     if not self._trailer: self._trailer = self.trailer(self._odo)
 
     if not self._header:  raise ValueError("header(_bbox,_speed,_power,_freq) not initialized")
-    if not self._body:    raise ValueError("body(_paths) not initialized")
+    if not self._body:    raise ValueError("body(_layers) not initialized")
     if not self._trailer: raise ValueError("trailer() not initialized")
 
     contents = self._header + self._body + self._trailer
@@ -177,6 +214,13 @@ class Ruida():
     if return_home:
       trav_d += dist_xy(xy, init)
     return [ cut_d, trav_d ]
+
+  def odoAdd(self, odo):
+    if self._odo is None: 
+      self._odo = copy.copy(odo)        # we change values later. Thus we need a copy.
+    else:
+      for n in range(len(odo)):
+        self._odo[n] += odo[n]
 
   def paths2moves(self, paths=None):
     """
@@ -220,16 +264,12 @@ class Ruida():
     y1 = bbox[1][1]
     return [[[x0,y0]], [[x1,y0]], [[x1,y1]], [[x0,y1]], [[x0, y0]]]
 
-  def body(self, paths):
+  def body(self, layers):
     """
     Convert a set of paths into lasercut instructions.
     Returns the binary instruction data.
 
-    maxrel is the limit in mm, for relative moves and cuts.
-    The theoretical limit is assumed to be between 5 and 10 mm,
-
-    FIXME: As of 2017-12-04 the encoding of enc('r', ...) is broken.
-           We always use absolute moves and cuts.
+    FIXME: Multiple layers are not implemented. We only use layers[0].
     """
 
     def relok(last, point):
@@ -249,7 +289,7 @@ class Ruida():
     relcounter = 0
 
     lp = None
-    for path in paths:
+    for path in layers[0]._paths:
       travel = True
       for p in path:
         if relok(lp, p) and (self._forceabs == 0 or relcounter < self._forceabs):
@@ -337,6 +377,8 @@ class Ruida():
            speed in mm/sec, freq in khz.
 
     Returns the binary instruction data.
+
+    FIXME: This header is suitable only for one layer.
     """
 
     if len(power) % 2: raise ValueError("Even number of elements needed in power[]")
