@@ -134,7 +134,7 @@ class Ruida():
     if forceabs is not None: self._forceabs = forceabs
     if bbox     is not None: self._bbox     = bbox
     if odo      is not None: self._odo      = odo
- 
+
     if layer >= len(self._layers): nlayers = layer+1
 
     if nlayers  is not None:
@@ -216,7 +216,7 @@ class Ruida():
     return [ cut_d, trav_d ]
 
   def odoAdd(self, odo):
-    if self._odo is None: 
+    if self._odo is None:
       self._odo = copy.copy(odo)        # we change values later. Thus we need a copy.
     else:
       for n in range(len(odo)):
