@@ -34,9 +34,10 @@
 # 2017-12-14, jw@fabmail.org
 #     v1.4 -- added bbox2moves() and paths2moves()
 # 2017-12-16, jw@fabmail.org
-#     v1.5 -- added support for multiple layer
+#     v1.5 -- added interface to support multiple layer
 # 2017-12-18, jw@fabmail.org
-#     v1.6 -- encode_byte() added. implementing multi layer support in header()
+#     v1.6 -- encode_byte() encode_color() added.
+#             multi layer support in header() and body() done.
 
 import sys, re, math, copy
 
@@ -104,9 +105,10 @@ class Ruida():
    color = [0,255,0]
         Give a display color for the layer. This is used in the preview
         to visualize different layers in different colors.
+        Expected as a triple [RED, GREEN, BLUE] each in [0..255]
   """
 
-  __version__ = "1.5"
+  __version__ = "1.6"
 
   def __init__(self, layers=None):
     if layers is None: layers = []
@@ -280,10 +282,10 @@ class Ruida():
 
   def body(self, layers):
     """
-    Convert a set of paths into lasercut instructions.
-    Returns the binary instruction data.
+    Convert a set of paths (one set per layer) into lasercut instructions.
+    Each layer has a prolog, that directly sets speed and powers.
 
-    FIXME: Multiple layers are not implemented. We only use layers[0].
+    Returns the binary instruction data.
     """
 
     def relok(last, point):
@@ -300,44 +302,93 @@ class Ruida():
       return max(dx, dy) <= maxrel
 
     data = bytes([])
-    relcounter = 0
+    # for lnum in reversed(range(len(layers))):         # Can be permuted, lower lnum's are processed first. Always.
+    for lnum in range(len(layers)):
+      l = layers[lnum]
 
-    lp = None
-    for path in layers[0]._paths:
-      travel = True
-      for p in path:
-        if relok(lp, p) and (self._forceabs == 0 or relcounter < self._forceabs):
+      # CAUTION: keep in sync with header()
+      power = copy.copy(l._power)
+      if len(power) % 2: raise ValueError("Even number of elements needed in power[]")
+      while len(power) < 8: power += power[-2:]
 
-          if self._forceabs > 0: relcounter += 1
+      speed = copy.copy(l._speed)
+      if type(speed) == float or type(speed) == int: speed = [1000, speed]
+      travelspeed = speed[0]
+      laserspeed = speed[1]
 
-          if p[1] == lp[1]:     # horizontal rel
-            if travel:
-              data += self.enc('-r', ['8a', p[0]-lp[0]])   # Move_Horiz 6.213mm
-            else:
-              data += self.enc('-r', ['aa', p[0]-lp[0]])   # Cut_Horiz -6.008mm
-          elif p[0] == lp[0]:   # vertical rel
-            if travel:
-              data += self.enc('-r', ['8b', p[1]-lp[1]])   # Move_Vert 17.1mm
-            else:
-              data += self.enc('-r', ['ab', p[1]-lp[1]])   # Cut_Vert 2.987mm
-          else:                 # other rel
-            if travel:
-              data += self.enc('-rr', ['89', p[0]-lp[0], p[1]-lp[1]])   # Move_To_Rel 3.091mm 0.025mm
-            else:
-              data += self.enc('-rr', ['a9', p[0]-lp[0], p[1]-lp[1]])   # Cut_Rel 0.015mm -1.127mm
+      ################## Body Prolog Start #######################
+      data += self.enc('-b-', ["""
+          ca 01 00                                        # Flags_CA_01 00
+          ca 02""", lnum, """                             # CA 02 Layer:0 priority?
+          ca 01 30                                        # Flags_CA_01 30
+          ca 01 10                                        # Flags_CA_01 10
+          ca 01 13                                        # Blow_on
+          """])
 
-        else:
+      ##   '-p-p-p-p-'
+      #    c6 12 00 00 00 00 00            # Cut_Open_delay_12 0.0 ms
+      #    c6 13 00 00 00 00 00            # Cut_Close_delay_13 0.0 ms
+      #    c6 50 """, 100, """             # Cut_through_power1 100%
+      #    c6 51 """, 100, """             # Cut_through_power2 100%
+      #    c6 55 """, 100, """             # Cut_through_power3 100%
+      #    c6 56 """, 100, """             # Cut_through_power4 100%
+      ## if the Cut_through_powers are not present, then c6 15 and c6 16 instead.
 
-          relcounter = 0
+      data += self.enc('-n-p-p-p-p-p-p-p-p-', ["""
+          c9 02 """, laserspeed, """      # Speed_C9 30.0mm/s
+          c6 15 00 00 00 00 00            # Cut_Open_delay_12 0.0 ms
+          c6 16 00 00 00 00 00            # Cut_Close_delay_13 0.0 ms
+          c6 01 """, power[0], """        # Laser_1_Min_Pow_C6_01 0%
+          c6 02 """, power[1], """        # Laser_1_Max_Pow_C6_02 0%
+          c6 21 """, power[2], """        # Laser_2_Min_Pow_C6_21 0%
+          c6 22 """, power[3], """        # Laser_2_Max_Pow_C6_22 0%
+          c6 05 """, power[4], """        # Laser_3_Min_Pow_C6_05 1%
+          c6 06 """, power[5], """        # Laser_3_Max_Pow_C6_06 0%
+          c6 07 """, power[6], """        # Laser_4_Min_Pow_C6_07 0%
+          c6 08 """, power[7], """        # Laser_4_Max_Pow_C6_08 0%
+          ca 03 01                        # Layer_CA_03 01
+          ca 10 00                        # CA 10 00
+          """])
+      ################## Body Prolog End #######################
 
-          if travel:
-            data += self.enc('-nn', ['88', p[0], p[1]])               # Move_To_Abs 0.0mm 0.0mm
+      relcounter = 0
+      lp = None
+      for path in l._paths:
+        travel = True
+        for p in path:
+          if relok(lp, p) and (self._forceabs == 0 or relcounter < self._forceabs):
+
+            if self._forceabs > 0: relcounter += 1
+
+            if p[1] == lp[1]:     # horizontal rel
+              if travel:
+                data += self.enc('-r', ['8a', p[0]-lp[0]])   # Move_Horiz 6.213mm
+              else:
+                data += self.enc('-r', ['aa', p[0]-lp[0]])   # Cut_Horiz -6.008mm
+            elif p[0] == lp[0]:   # vertical rel
+              if travel:
+                data += self.enc('-r', ['8b', p[1]-lp[1]])   # Move_Vert 17.1mm
+              else:
+                data += self.enc('-r', ['ab', p[1]-lp[1]])   # Cut_Vert 2.987mm
+            else:                 # other rel
+              if travel:
+                data += self.enc('-rr', ['89', p[0]-lp[0], p[1]-lp[1]])   # Move_To_Rel 3.091mm 0.025mm
+              else:
+                data += self.enc('-rr', ['a9', p[0]-lp[0], p[1]-lp[1]])   # Cut_Rel 0.015mm -1.127mm
+
           else:
-            data += self.enc('-nn', ['a8', p[0], p[1]])               # Cut_Abs_a8 17.415mm 7.521mm
 
-        lp = p
-        travel = False
+            relcounter = 0
+
+            if travel:
+              data += self.enc('-nn', ['88', p[0], p[1]])               # Move_To_Abs 0.0mm 0.0mm
+            else:
+              data += self.enc('-nn', ['a8', p[0], p[1]])               # Cut_Abs_a8 17.415mm 7.521mm
+
+          lp = p
+          travel = False
     return data
+
 
   def scramble_bytes(self, data):
     if sys.version_info.major < 3:
@@ -419,6 +470,7 @@ class Ruida():
     for lnum in range(len(layers)):
       l = layers[lnum]
 
+      # CAUTION: keep in sync with body()
       power = copy.copy(l._power)
       if len(power) % 2: raise ValueError("Even number of elements needed in power[]")
       while len(power) < 8: power += power[-2:]
@@ -435,8 +487,8 @@ class Ruida():
       data += self.enc('-bp-bp', ["c6 35", lnum, power[4], "c6 36", lnum, power[5]]) # Laser_3_Min/Max_Pow
       data += self.enc('-bp-bp', ["c6 37", lnum, power[6], "c6 38", lnum, power[7]]) # Laser_3_Min/Max_Pow
 
-      data += self.enc('-bn-bb-bnn-bnn-bnn-bnn-', ["""
-        ca 06""", lnum, 0, """                            # Layer_CA_06 Layer:0 00 00 00 00 00
+      data += self.enc('-bc-bb-bnn-bnn-bnn-bnn-', ["""
+        ca 06""", lnum, l._color, """                     # Layer_CA_06 Layer:0 00 00 00 00 00  RGB-Color for preview
         ca 41""", lnum, 0, """                            # ??
         e7 52""", lnum, l._bbox[0][0], l._bbox[0][1], """ # E7 52 Layer:0 top left?
         e7 53""", lnum, l._bbox[1][0], l._bbox[1][1], """ # Bottom_Right_E7_53 Layer:0
@@ -451,7 +503,7 @@ class Ruida():
         e7 54 00 00 00 00 00 00         # Pen_Draw_Y 00 0.0mm
         e7 54 01 00 00 00 00 00         # Pen_Draw_Y 01 0.0mm
         """])
-    data += self.enc('-nn-nn-nn-nn-nn-nn-nn-nn-b-', ["""
+    data += self.enc('-nn-nn-nn-nn-nn-nn-nn-nn-', ["""
         e7 55 00 00 00 00 00 00                         # Laser2_Y_Offset False 0.0mm
         e7 55 01 00 00 00 00 00                         # Laser2_Y_Offset True 0.0mm
         f1 03 00 00 00 00 00 00 00 00 00 00             # Laser2_Offset 0.0mm 0.0mm
@@ -472,34 +524,6 @@ class Ruida():
         e7 23 """, xmin, ymin, """                      # E7 23 0.0mm 0.0mm
         e7 24 00                                        # E7 24 00
         e7 08 00 01 00 01 """, xmax, ymax, """          # Bottom_Right_E7_08 00 01 00 01 17.414mm 24.868mm
-        ca 01 00                                        # Flags_CA_01 00
-        ca 02""", len(layers)-1, """                    # CA 02 Layer:0
-        ca 01 30                                        # Flags_CA_01 30
-        ca 01 10                                        # Flags_CA_01 10
-        ca 01 13                                        # Blow_on
-        """])
-
-    ########### this is the body prolog: ###########################
-FIXME: move this to body. We need to generate one body per layer.
-
-    data += self.enc('-n-p-p-p-p-p-p-p-p-p-p-p-p-', ["""
-        c9 02 """, laserspeed, """      # Speed_C9 30.0mm/s
-        c6 12 00 00 00 00 00            # Cut_Open_delay_12 0.0 ms
-        c6 13 00 00 00 00 00            # Cut_Close_delay_13 0.0 ms
-        c6 50 """, 100, """             # Cut_through_power1 100%
-        c6 51 """, 100, """             # Cut_through_power2 100%
-        c6 55 """, 100, """             # Cut_through_power3 100%
-        c6 56 """, 100, """             # Cut_through_power4 100%
-        c6 01 """, power[0], """        # Laser_1_Min_Pow_C6_01 0%
-        c6 02 """, power[1], """        # Laser_1_Max_Pow_C6_02 0%
-        c6 21 """, power[2], """        # Laser_2_Min_Pow_C6_21 0%
-        c6 22 """, power[3], """        # Laser_2_Max_Pow_C6_22 0%
-        c6 05 """, power[4], """        # Laser_3_Min_Pow_C6_05 1%
-        c6 06 """, power[5], """        # Laser_3_Max_Pow_C6_06 0%
-        c6 07 """, power[6], """        # Laser_4_Min_Pow_C6_07 0%
-        c6 08 """, power[7], """        # Laser_4_Max_Pow_C6_08 0%
-        ca 03 0f                        # Layer_CA_03 0f
-        ca 10 00                        # CA 10 00
         """])
     return data
 
@@ -538,6 +562,13 @@ FIXME: move this to body. We need to generate one body per layer.
     res.reverse()
     return bytes(res)
 
+  def encode_color(self, color):
+    """
+    color = [RED, GREEN, BLUE]
+    """
+    cc = ((color[2]&0xff)<<16) + ((color[1]&0xff)<<8) + (color[0]&0xff)
+    return self.encode_number(cc, scale=1)
+
   def enc(self, fmt, tupl):
     """
     Encode the elements of tupl according to the format string.
@@ -548,6 +579,7 @@ FIXME: move this to body. We need to generate one body per layer.
     'p'       encode_percent()
     'r'       encode_relcoord()
     'b'       encode_byte()
+    'c'       encode_color()
     """
     if len(fmt) != len(tupl): raise ValueError("format '"+fmt+"' length differs from len(tupl)="+str(len(tupl)))
 
@@ -558,6 +590,7 @@ FIXME: move this to body. We need to generate one body per layer.
       elif fmt[i] == 'p': ret += self.encode_percent(tupl[i])
       elif fmt[i] == 'r': ret += self.encode_relcoord(tupl[i])
       elif fmt[i] == 'b': ret += self.encode_byte(tupl[i])
+      elif fmt[i] == 'c': ret += self.encode_color(tupl[i])
       else: raise ValueError("unknown character in fmt: "+fmt)
     return ret
 
@@ -680,7 +713,7 @@ if __name__ == '__main__':
   rd = Ruida()
   rd.set(nlayers=2)
   rd.set(layer=0, color=[0,255,0], speed=100, power=[10,18], paths=paths_list_mark)
-  rd.set(layer=1, color=[0,0,0],   speed=30,  power=[40,70], paths=paths_list_cut)
+  rd.set(layer=1, color=[255,0,0], speed=30,  power=[40,70], paths=paths_list_cut)
 
   with open('square_tri_test.rd', 'wb') as fd:
     rd.write(fd)
