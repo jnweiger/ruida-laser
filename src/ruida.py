@@ -35,6 +35,8 @@
 #     v1.4 -- added bbox2moves() and paths2moves()
 # 2017-12-16, jw@fabmail.org
 #     v1.5 -- added support for multiple layer
+# 2017-12-18, jw@fabmail.org
+#     v1.6 -- encode_byte() added. implementing multi layer support in header()
 
 import sys, re, math, copy
 
@@ -164,9 +166,9 @@ class Ruida():
 
     if not self._header:
       if self._layers:
-        for l in self._layers[0:1]:
-          if not l._bbox and l._paths: l._bbox = self.boundingbox(l._paths)
-          self._header = self.header(l._bbox, l._speed, l._power, l._freq)
+        for l in self._layers:
+          if l._bbox is None and l._paths: l._bbox = self.boundingbox(l._paths)
+      self._header = self.header(self._layers)
     if not self._body:
       if self._layers:
         self._body = self.body(self._layers)
@@ -253,6 +255,18 @@ class Ruida():
         if point[1] > ymax: ymax = point[1]
         if point[1] < ymin: ymin = point[1]
     return [[xmin, ymin], [xmax, ymax]]
+
+  def bbox_combine(self, bbox1, bbox2):
+    """
+    returns the boundingbox of two bounding boxes.
+    """
+    if bbox1 is None: return bbox2
+    if bbox2 is None: return bbox1
+    x0 = min(bbox1[0][0], bbox2[0][0])
+    y0 = min(bbox1[0][1], bbox2[0][1])
+    x1 = max(bbox1[1][0], bbox2[1][0])
+    y1 = max(bbox1[1][1], bbox2[1][1])
+    return [[x0, y0], [x1, y1]]
 
   def bbox2moves(self, bbox):
     """
@@ -361,34 +375,31 @@ class Ruida():
     if res_b>0xff:res_b-=0x100
     return res_b
 
-  def header(self, bbox, speed, power, freq):
+  def header(self, layers):
     """
     Generate machine initialization instructions, to be sent before geometry.
 
-    The bounding box bbox is expected in
-    [[xmin, ymin], [xmax, ymax]] format, as returned by the boundingbox()
-    method. Note: all test data seen had xmin=0, ymin=0.
+    layers is a list of RuidaLayer() objects, containing:
 
-    The power is expected as list of 2 to 8 elements, [min1, max1, ...]
-    missing elements are added by repetition.
-    Only one layer is currently initialized and used for all data.
+    _bbox in [[xmin, ymin], [xmax, ymax]] format, as returned by the boundingbox()
+            method. Note: all test data seen had xmin=0, ymin=0.
+    _speed: single value per layer.
+    _power: a list of 2 to 8 elements, [min1, max1, ...]
+            Missing elements are added by repetition.
 
     Units: Lengths in mm, power in percent [0..100],
-           speed in mm/sec, freq in khz.
+            speed in mm/sec, freq in khz.
 
     Returns the binary instruction data.
-
-    FIXME: This header is suitable only for one layer.
     """
 
-    if len(power) % 2: raise ValueError("Even number of elements needed in power[]")
-    while len(power) < 8: power += power[-2:]
+    bbox = None
+    for l in layers:
+      print("layer bbox: ", l._bbox)
+      bbox = self.bbox_combine(bbox, l._bbox)
+    print("combined: ", bbox)
     (xmin, ymin) = bbox[0]
     (xmax, ymax) = bbox[1]
-
-    if type(speed) == float or type(speed) == int: speed = [1000, speed]
-    travelspeed = speed[0]
-    laser1speed = speed[1]
 
     data = self.encode_hex("""
         d8 12           # Red Light on ?
@@ -401,24 +412,46 @@ class Ruida():
     data += self.enc('-nn', ["e7 50", xmin, ymin])        # Top_Left_E7_50
     data += self.enc('-nn', ["e7 51", xmax, ymax])        # Bottom_Right_E7_51
     data += self.enc('-nn', ["e7 04 00 01 00 01", 0, 0])  # E7 04 ???
-    data += self.enc('-n',  ["e7 05 00 c9 04 00", laser1speed]) # Speed_E7_05
+    data += self.enc('-',   ["e7 05 00"])                 # E7 05 ???
 
-    data += self.enc('-p-p', ["c6 31 00", power[0], "c6 32 00", power[1]]) # Laser_1_Min/Max_Pow Layer:0
-    data += self.enc('-p-p', ["c6 41 00", power[2], "c6 42 00", power[3]]) # Laser_2_Min/Max_Pow Layer:0
-    data += self.enc('-p-p', ["c6 35 00", power[4], "c6 36 00", power[5]]) # Laser_3_Min/Max_Pow Layer:0
-    data += self.enc('-p-p', ["c6 37 00", power[6], "c6 38 00", power[7]]) # Laser_3_Min/Max_Pow Layer:0
-    data += self.enc('-nn-nn-nn-nn-', ["""
-        ca 06 00 00 00 00 00 00         # Layer_CA_06 Layer:0 00 00 00 00 00
-        ca 41 00 00                     # ??
-        e7 52 00""", xmin, ymin, """    # E7 52 Layer:0 top left?
-        e7 53 00""", xmax, xmin, """    # Bottom_Right_E7_53 Layer:0
-        e7 61 00""", xmin, ymin, """    # E7 61 Layer:0 top left?
-        e7 62 00""", xmax, ymax, """    # Bottom_Right_E7_62 Layer:0
-        ca 22 00                        # ??
+    ## start of per layer headers
+
+    for lnum in range(len(layers)):
+      l = layers[lnum]
+
+      power = copy.copy(l._power)
+      if len(power) % 2: raise ValueError("Even number of elements needed in power[]")
+      while len(power) < 8: power += power[-2:]
+
+      speed = copy.copy(l._speed)
+      if type(speed) == float or type(speed) == int: speed = [1000, speed]
+      travelspeed = speed[0]
+      laserspeed = speed[1]
+
+      data += self.enc('-bn',  ["c9 04", lnum, laserspeed])
+
+      data += self.enc('-bp-bp', ["c6 31", lnum, power[0], "c6 32", lnum, power[1]]) # Laser_1_Min/Max_Pow
+      data += self.enc('-bp-bp', ["c6 41", lnum, power[2], "c6 42", lnum, power[3]]) # Laser_2_Min/Max_Pow
+      data += self.enc('-bp-bp', ["c6 35", lnum, power[4], "c6 36", lnum, power[5]]) # Laser_3_Min/Max_Pow
+      data += self.enc('-bp-bp', ["c6 37", lnum, power[6], "c6 38", lnum, power[7]]) # Laser_3_Min/Max_Pow
+
+      data += self.enc('-bn-bb-bnn-bnn-bnn-bnn-', ["""
+        ca 06""", lnum, 0, """                            # Layer_CA_06 Layer:0 00 00 00 00 00
+        ca 41""", lnum, 0, """                            # ??
+        e7 52""", lnum, l._bbox[0][0], l._bbox[0][1], """ # E7 52 Layer:0 top left?
+        e7 53""", lnum, l._bbox[1][0], l._bbox[1][1], """ # Bottom_Right_E7_53 Layer:0
+        e7 61""", lnum, l._bbox[0][0], l._bbox[0][1], """ # E7 61 Layer:0 top left?
+        e7 62""", lnum, l._bbox[1][0], l._bbox[1][1], """ # Bottom_Right_E7_62 Layer:0
+        """])
+
+    ## end of per layer headers
+
+    data += self.enc('-b-', ["""
+        ca 22""", len(layers)-1, """    # ?? Max layer number ??
         e7 54 00 00 00 00 00 00         # Pen_Draw_Y 00 0.0mm
         e7 54 01 00 00 00 00 00         # Pen_Draw_Y 01 0.0mm
         """])
-    data += self.enc('-nn-nn-nn-nn-nn-nn-nn-nn-', ["""
+    data += self.enc('-nn-nn-nn-nn-nn-nn-nn-nn-b-', ["""
         e7 55 00 00 00 00 00 00                         # Laser2_Y_Offset False 0.0mm
         e7 55 01 00 00 00 00 00                         # Laser2_Y_Offset True 0.0mm
         f1 03 00 00 00 00 00 00 00 00 00 00             # Laser2_Offset 0.0mm 0.0mm
@@ -440,13 +473,17 @@ class Ruida():
         e7 24 00                                        # E7 24 00
         e7 08 00 01 00 01 """, xmax, ymax, """          # Bottom_Right_E7_08 00 01 00 01 17.414mm 24.868mm
         ca 01 00                                        # Flags_CA_01 00
-        ca 02 00                                        # CA 02 Layer:0
+        ca 02""", len(layers)-1, """                    # CA 02 Layer:0
         ca 01 30                                        # Flags_CA_01 30
         ca 01 10                                        # Flags_CA_01 10
         ca 01 13                                        # Blow_on
         """])
+
+    ########### this is the body prolog: ###########################
+FIXME: move this to body. We need to generate one body per layer.
+
     data += self.enc('-n-p-p-p-p-p-p-p-p-p-p-p-p-', ["""
-        c9 02 """, laser1speed, """     # Speed_C9 30.0mm/s
+        c9 02 """, laserspeed, """      # Speed_C9 30.0mm/s
         c6 12 00 00 00 00 00            # Cut_Open_delay_12 0.0 ms
         c6 13 00 00 00 00 00            # Cut_Close_delay_13 0.0 ms
         c6 50 """, 100, """             # Cut_through_power1 100%
@@ -510,6 +547,7 @@ class Ruida():
     'n'       encode_number()
     'p'       encode_percent()
     'r'       encode_relcoord()
+    'b'       encode_byte()
     """
     if len(fmt) != len(tupl): raise ValueError("format '"+fmt+"' length differs from len(tupl)="+str(len(tupl)))
 
@@ -519,6 +557,7 @@ class Ruida():
       elif fmt[i] == 'n': ret += self.encode_number(tupl[i])
       elif fmt[i] == 'p': ret += self.encode_percent(tupl[i])
       elif fmt[i] == 'r': ret += self.encode_relcoord(tupl[i])
+      elif fmt[i] == 'b': ret += self.encode_byte(tupl[i])
       else: raise ValueError("unknown character in fmt: "+fmt)
     return ret
 
@@ -554,6 +593,9 @@ class Ruida():
     if r > 8191: return 0.001 * (r-16384)
     else:        return 0.001 * r
 
+  def encode_byte(self, n):
+    return self.encode_number(n, length=1, scale=1)
+
   def encode_percent(self, n):
     """
     returns two bytes, used with laser and layer percentages.
@@ -570,6 +612,7 @@ class Ruida():
     str = re.sub('#.*$','', str, flags=re.MULTILINE)    # weed out comments.
     l = map(lambda x: int(x, base=16), str.split())     # locale.atoi() is to be avoided!
     return bytes(l)
+
 
 if __name__ == '__main__':
   def hexdumpb(data):
@@ -623,8 +666,21 @@ if __name__ == '__main__':
   print("mvpath comparison: ", mvpath_cmp)
   print("rd.paths2moves():  ", mvpath)
 
-#  for x in range(17,333): paths[-1].append([x,x-10])
-  rd.set(paths=paths, forceabs=10)
+  ###################################################
+  print("Test Mark+Cut")
+  paths_list_cut=[
+        [[0,0], [50,0], [50,50], [0,50], [0,0]]
+        ]
+  paths_list_mark=[
+        [[12,10], [38,25], [12,40], [12,10]],
+        [[16,6], [10,6], [13,3], [16, 6]],
+        [[60,6], [54,6], [57,3], [60, 6]]
+      ]
+
+  rd = Ruida()
+  rd.set(nlayers=2)
+  rd.set(layer=0, color=[0,255,0], speed=100, power=[10,18], paths=paths_list_mark)
+  rd.set(layer=1, color=[0,0,0],   speed=30,  power=[40,70], paths=paths_list_cut)
 
   with open('square_tri_test.rd', 'wb') as fd:
     rd.write(fd)
