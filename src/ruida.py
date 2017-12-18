@@ -115,6 +115,7 @@ class Ruida():
     self._layers = layers
 
     self._odo = None
+    self._globalbbox = None
 
     self._header = None
     self._body = None
@@ -134,10 +135,10 @@ class Ruida():
   def addLayer(self, layer):
     self._layers.append(layer)
 
-  def set(self, nlayers=None, layer=0, paths=None, speed=None, power=None, bbox=None, freq=None, odo=None, color=None, forceabs=None):
-    if forceabs is not None: self._forceabs = forceabs
-    if bbox     is not None: self._bbox     = bbox
-    if odo      is not None: self._odo      = odo
+  def set(self, nlayers=None, layer=0, paths=None, speed=None, power=None, globalbbox=None, bbox=None, freq=None, odo=None, color=None, forceabs=None):
+    if forceabs   is not None: self._forceabs   = forceabs
+    if globalbbox is not None: self._globalbbox = globalbbox
+    if odo        is not None: self._odo        = odo
 
     if layer >= len(self._layers): nlayers = layer+1
 
@@ -444,7 +445,7 @@ class Ruida():
     Returns the binary instruction data.
     """
 
-    bbox = None
+    bbox = self._globalbbox
     for l in layers:
       print("layer bbox: ", l._bbox)
       bbox = self.bbox_combine(bbox, l._bbox)
