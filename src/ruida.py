@@ -447,9 +447,7 @@ class Ruida():
 
     bbox = self._globalbbox
     for l in layers:
-      print("layer bbox: ", l._bbox)
       bbox = self.bbox_combine(bbox, l._bbox)
-    print("combined: ", bbox)
     (xmin, ymin) = bbox[0]
     (xmax, ymax) = bbox[1]
 
