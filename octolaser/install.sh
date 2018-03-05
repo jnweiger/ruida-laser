@@ -1,5 +1,6 @@
-sudo apt-get install python python-pip virutalenv
-git clone --depth 0 https://github.com/foosel/OctoPrint.git
+sudo apt-get install python python-pip virtualenv
+git clone --depth 1 https://github.com/foosel/OctoPrint.git
+cd OctoPrint
 virtualenv octovenv
 ./octovenv/bin/python setup.py install
 ./octovenv/bin/octoprint
