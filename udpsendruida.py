@@ -34,14 +34,41 @@ class RuidaUdp():
     self.sock.bind((self.INADDR_ANY_DOTTED, localport))
     self.sock.connect((host, port))
 
-  def _checksum(self, data):
-    cs=sum(data)
+  def _checksum(self, data, start, length):
+    cs=sum(data[start:start+length])
     b1=cs & 0xff
     b0= (cs>>8) & 0xff
     return bytes([b0,b1])
 
   def write(self, data):
-    self.sock.send(data)
+    start = 0
+    l = len(data)
+    while start < l:
+      chunk_sz = l - start
+      if chunk_sz > self.MTU:
+        chunk_sz = self.MTU
+      chksum = self._checksum(data, start, chunk_sz)
+      buf = chksum + data[start:start+chunk_sz]
+      self.send(buf)
+      start += chunk_sz
+
+  def send(self, ary):
+    while True:
+      self.sock.send(ary)
+      data = self.sock.recv(8)     # timeout???
+      l = len(data)
+      if l == 0:
+        print("received nothing")
+        break
+      # l == 1
+     if data[0] == 0x46:        # 'F'
+        raise IOError("checksum error")
+     elif data[0] == 0xc6:
+        # print("received ACK");
+        break
+     else:
+        print("unknown response %02x\n" % data[0])
+
 
 laser = RuidaUdp(host)
 rdfile = open(file, 'rb').read()
