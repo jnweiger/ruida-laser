@@ -7,7 +7,7 @@
 # References (and thanks to):
 # * https://wiki.fablab-nuernberg.de/w/Diskussion:Nova_35
 # * https://github.com/kkaempf/LibLaserCut/tree/thunderlaser/src/com/t_oster/liblasercut/drivers/ruida
-# 
+#
 # test against:
 # ncat -l -u -v 50200
 
@@ -33,6 +33,9 @@ class RuidaUdp():
     self.sock = socket(AF_INET, SOCK_DGRAM)
     self.sock.bind((self.INADDR_ANY_DOTTED, localport))
     self.sock.connect((host, port))
+    self.sock.settimeout(self.NETWORK_TIMEOUT * 0.001)
+    # timeval = struct.pack('ll', 2, 100)
+    # self.sock.setsockopt(SOL_SOCKET, SO_RCVTIMEO, timeval)
 
   def _checksum(self, data, start, length):
     cs=sum(data[start:start+length])
@@ -55,19 +58,24 @@ class RuidaUdp():
   def send(self, ary):
     while True:
       self.sock.send(ary)
-      data = self.sock.recv(8)     # timeout???
+      try:
+        data = self.sock.recv(8)     # timeout raises an exception
+      except Exception as e:
+        print("RuidaUdp.send", e)
+        break
       l = len(data)
       if l == 0:
         print("received nothing")
         break
       # l == 1
-     if data[0] == 0x46:        # 'F'
+      if data[0] == 0x46:           # 'F'
         raise IOError("checksum error")
-     elif data[0] == 0xc6:
+      elif data[0] == 0xc6:
         # print("received ACK");
         break
-     else:
+      else:
         print("unknown response %02x\n" % data[0])
+        break
 
 
 laser = RuidaUdp(host)
