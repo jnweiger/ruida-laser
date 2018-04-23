@@ -9,8 +9,20 @@
 ==== Checksum ====
 
 2 Bytes - sum of scrambled message bytes; MSB first.
+Checksum has to be send before message.
 
-Checksum has to be send before message. 
+==== UDP Transmission ====
+
+* The device listens on a fixed UDP port 50200. IPaddress is configurable, but netmask is 255.255.255.0 fixed.
+* An RD file is transfered as payload, same commands and syntax as with USB-Serial or USB-MassStorage.
+* The payload is split in chunks with a well known maximum size (MTU). (The last packet is usually shorter)
+* There is no header, and no arbitration phase, but successful transmission of the first chunk indicates device ready.
+* Each chunk starts with a two byte checksum, followed by payload data. Length of the payload is implicit by the
+  UDP datagram size. (Would not work with TCP)
+* Each chunk is acknowledged with a single byte response packet:
+  0xc6 if all is well, The next chunk should be sent. TODO: Within a timout?
+  0x46 if error. TODO: Checksum error and/or busy?
+* The first chunk should be retried when 0x46 was received. For subsequent chunks transmission should be aborted.
 
 ==== Values ====
 
