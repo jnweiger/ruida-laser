@@ -25,8 +25,12 @@
 # test against:
 # ncat -l -u -v 50200
 
-import sys
+import os, sys, time
 from socket import *
+
+if sys.version_info.major < 3:
+  print("Need python3 for "+sys.argv[0])
+  sys.exit(1)
 
 if len(sys.argv) < 3:
   print("Usage: %s IPADDR FILE.rd" % sys.argv[0])
@@ -42,10 +46,13 @@ class RuidaUdp():
   SOURCE_PORT = 40200     # used by rdworks in Windows
   DEST_PORT   = 50200     # Ruida Board
   MTU = 1470              # max data length per datagram (minus checksum)
+  verbose = True          # babble while working
+  chunkpause = 0.0        # 1.5        # seconds to wait between chunks. debugging only.
 
   def __init__(self, host, port=DEST_PORT, localport=SOURCE_PORT):
     self.sock = socket(AF_INET, SOCK_DGRAM)
-    self.sock.bind((self.INADDR_ANY_DOTTED, localport))
+    localport = os.environ.get("UDPSENDRUIDA_LOCALPORT", str(localport))
+    self.sock.bind((self.INADDR_ANY_DOTTED, int(localport)))
     self.sock.connect((host, port))
     self.sock.settimeout(self.NETWORK_TIMEOUT * 0.001)
     # timeval = struct.pack('ll', 2, 100)
@@ -70,6 +77,9 @@ class RuidaUdp():
       start += chunk_sz
 
   def send(self, ary, retry=False):
+    if self.chunkpause > 0.0:
+      time.sleep(self.chunkpause)
+
     retry_delay_sec = 0.2
     retry_delay_sec_max = 5.0
     while True:
@@ -77,22 +87,22 @@ class RuidaUdp():
       try:
         data = self.sock.recv(8)     # timeout raises an exception
       except Exception as e:
-        print("RuidaUdp.send", e)
+        print("RuidaUdp.send (sock recv)", e)
         break
       l = len(data)
       if l == 0:
-        print("received nothing")
+        if self.verbose: print("received nothing (empty)")
         break
       # l == 1
       if data[0] == 0x46:           # 'F'
         if retry:
-          print("retrying ...")
+          if self.verbose: print("retrying ...")
           time.sleep(retry_delay_sec)   # truncated binary backoff
           if retry_delay_sec < retry_delay_sec_max: retry_delay_sec *= 2
         else:
           raise IOError("checksum error")
       elif data[0] == 0xc6:
-        # print("received ACK");
+        if self.verbose: print("received ACK");
         break
       else:
         print("unknown response %02x\n" % data[0])
