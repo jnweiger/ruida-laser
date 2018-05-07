@@ -17,10 +17,10 @@
 # - Each chunk starts with a two byte checksum, followed by payload data. Length of the payload is implicit by the
 #   UDP datagram size. (Would not work with TCP)
 # - Each chunk is acknowledged with a single byte response packet:
-#   0xc6 if all is well, The next chunk should be sent. TODO: Within a timout?
-#   0x46 if error. TODO: Checksum error and/or busy?
+#   0xc6 if all is well, The next chunk should be sent. A delay of 4 seconds was tested successfully.
+#   0x46 if error. TODO: Checksum error and/or busy? A running laser job does not cause a busy condition.
 # - The first chunk should be retried when 0x46 was received. For subsequent chunks transmission should be aborted.
-# - TODO: is a pause needed after the last chunk before the next paylod can be sent?
+# - No pause is needed after the last chunk. The payload contains a termination token.
 #
 # test against:
 # ncat -l -u -v 50200
