@@ -42,6 +42,10 @@ if len(sys.argv) < 3:
   print("Usage: %s DIR/FILE_Prefix" % sys.argv[0])
   sys.exit(1)
 
+## Nova35_Veitsbronn            192.168.2.21:50200
+## Nova35_Proxy_Veitsbronn      192.168.2.23:50200
+## Nova35_FabLabNbg             172.18.16.11:50200
+## Nova35_Proxy_FabLabNbg       172.18.16.23:50200
 
 class RuidaUdpServer():
   NETWORK_TIMEOUT = 10000
