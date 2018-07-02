@@ -1,6 +1,13 @@
+grep -q nova35_fablabnbg /etc/hosts || sudo tee <<EOF -a /etc/hosts > /dev/null
+#
+# lasers for proxy23
+192.168.2.21 nova35_falafue
+172.18.16.11 nova35_fablabnbg
+EOF
+
 nmtui
- -> ethernet nova35_falafue,   eth0,  192.168.2.23, gw 192.168.2.1, dns 8.8.8.8
- -> ethernet nova35_fablabnbg, eth0,  172.18.16.23, gw 172.18.16.254 ?, dns 8.8.8.8
+ -> ethernet nova35_falafue,   eth0,  192.168.2.23/23, gw 192.168.2.1, dns 8.8.8.8
+ -> ethernet nova35_fablabnbg, eth0,  172.18.16.23/24, ? gw 172.18.16.254 ?, dns 8.8.8.8
  -> wifi jw_hotspot,           wlan0, jw samsung s4, ******, ipv4 automatic
 
 ps -ef | grep dhclient
