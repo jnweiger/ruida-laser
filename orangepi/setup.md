@@ -14,12 +14,26 @@ ps -ef | grep dhclient
  ... eth0
  ... wlan0
 
+apt-get update
+apt-get install mtr armbian-config
+apt-get upgrade
+
+armbian-config
+ -> IPV6  Disable ...
+
+# For whatever reason, connection falafue does not come up automatically.
+# This does the trick: 
+vi /etc/rc.local
+ sleep 10
+ nmcli c up Nova35_falafue
+
 # need to switch off dhclient on eth0, before we can activate any of the other configs...
 
 vi /etc/network/interfaces
- # Wired adapter #1
- allow-hotplug eth0
+ ## Wired adapter #1
+ # allow-hotplug eth0
  no-auto-down eth0
+ auto eth0
  #iface eth0 inet dhcp   # dhclient on eth0???
 ZZ
 reboot
