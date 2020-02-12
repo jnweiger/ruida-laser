@@ -22,6 +22,7 @@
 #   0xc6 if all is well, 0x46 if checksum error.
 # - IF a UDP Stream already exists, additional incoming packets are NaK'ed with 0x46
 #
+# Packets are alway sent from port 50200 and are always received by port 40200.
 
 
 import os, sys, time, select
@@ -36,7 +37,7 @@ if len(sys.argv) < 3:
   sys.exit(1)
 
 class RuidaProxyServer():
-  NETWORK_TIMEOUT = 10000       # ends a UDP Stream.
+  BUSY_TIMEOUT = 10000    # ends a UDP Stream.
   INADDR_ANY_DOTTED = '0.0.0.0'  # bind to all interfaces.
   SOURCE_PORT = 40200     # used by rdworks in Windows
   DEST_PORT   = 50200     # Ruida Board
@@ -44,47 +45,55 @@ class RuidaProxyServer():
   ACK_BYTE = 0xc6
   NACK_BYTE = 0x46	  # csum error. FIXME: do we kow other error codes?
   CHUNK_SZ = 10000	  # max size per udp packet
+  FIN_TOKEN = "\xd7"      # the last packet in a transmission contains this.
 
   def __init__(self, port=DEST_PORT):
     localport = port
 
-    self.udp_sock = socket(AF_INET, SOCK_DGRAM)
-    self.udp_sock.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.udp_sock.bind((self.INADDR_ANY_DOTTED, int(localport)))
+    self.udp_sock_world = socket(AF_INET, SOCK_DGRAM)
+    self.udp_sock_world.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.udp_sock_world.bind((self.INADDR_ANY_DOTTED, int(DEST_PORT)))
 
-    self.tcp_sock = socket(AF_INET, SOCK_STREAM)
-    self.tcp_sock.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.tcp_sock.bind((self.INADDR_ANY_DOTTED, int(localport)))
-    self.tcp_sock.listen(5)
-    self.tcp_conn = None
-    self.busy = False
-    self.output = None
-
-  def _checksum(self, data, start, length):
-    cs=sum(data[start:start+length])
-    b1=cs & 0xff
-    b0= (cs>>8) & 0xff
-    return bytes([b0,b1])
+    self.udp_sock_laser = socket(AF_INET, SOCK_DGRAM)
+    self.udp_sock_laser.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.udp_sock_laser.bind((self.INADDR_ANY_DOTTED, int(SO_REUSEADDR)))
 
   def find_end_token(data):
-    if "\xd7" in data:
+    if FIN_TOKEN in data:
       return True
     False
 
+
 proxy = RuidaProxyServer()
+last_pkg_tstamp = 0     # seconds since epoch
+last_sender_addr = 0    # the one remote machine, that "currently" sends.
+stream_busy = False     # True until we find_end_token()
+
 
 while True:
   ending = False
-  inputs = [proxy.udp_sock, proxy.tcp_sock]
-  if proxy.tcp_conn is not None:
-    inputs.append(proxy.tcp_conn.fileno())
+  inputs = [proxy.udp_sock_laser, proxy.udp_sock_world]
 
   try:
-    inputready,outputready,exceptready = select.select(inputs, outputs, [])
+    inputready,outputready,exceptready = select.select(inputs, [], [])
   except select.error as e:
     break
   except socket.error as e:
     break
+
+
+  if proxy.udp_sock_world in inputready:
+    now = time.time()
+    data, sender_addr = proxy.udp_sock_world.recvfrom(proxy.CHUNK_SZ)
+    if (now - last_pkg_tstamp < BUSY_TIMEOUT):
+        # we forward packets that come from the same sender than before
+        # we reject packets from different sender.
+    else:
+        # timeout reached. 
+        # we accept any other sender as new source.
+        # if the stream is still busy, we send an artificial fin token to the laser, then we start forwarding.
+        if stream_busy:
+
 
   if proxy.tcp_sock in inputready:
     conn, sender_addr = proxy.tcp_sock.accept()
