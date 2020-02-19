@@ -3,14 +3,16 @@
 # thunderlaserdummy.py
 #
 # Prepare a loopback network like this:
-#   ifconfig lo:1 192.168.2.1 up
+#   sudo ifconfig lo:1 192.168.2.21 up       # falafue
+#   sudo ifconfig lo:1 172.22.30.12 up       # fababnbg
 #
 
 from __future__ import print_function
 
 import socket, sys
 
-ip_addr = '192.168.2.21'
+ip_addr = '192.168.2.21'                # falafue
+# ip_addr = '172.22.30.12'                # fablabnbg
 server_port = 50200
 mtu = 1470
 
@@ -46,7 +48,10 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 if hasattr(socket, "SO_REUSEPORT"):
   sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+print("sock.bind %s:%d ..." % (ip_addr, server_port), end="")
 sock.bind((ip_addr, server_port))
+print(" listening ...")
+
 
 # somebody does 
 #   sock.sendto(b"Hello World\n", (ip_addr, server_port))

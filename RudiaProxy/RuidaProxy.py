@@ -23,6 +23,9 @@
 # - IF a UDP Stream already exists, additional incoming packets are NaK'ed with 0x46
 #
 # Packets are alway sent from port 50200 and are always received by port 40200.
+#
+# Prepare a loopback network like this:
+#   sudo ifconfig lo:2 172.22.30.50 up       # fababnbg
 
 
 import os, sys, time, select
@@ -33,7 +36,7 @@ if sys.version_info.major < 3:
   sys.exit(1)
 
 if len(sys.argv) < 3:
-  print("Usage: %s RUIDA_IP_ADDR" % sys.argv[0])
+  print("Usage: %s RUIDA_IP_ADDR [LISTEN_IP_ADDR]" % sys.argv[0])
   sys.exit(1)
 
 class RuidaProxyServer():
@@ -47,16 +50,16 @@ class RuidaProxyServer():
   CHUNK_SZ = 10000	  # max size per udp packet
   FIN_TOKEN = "\xd7"      # the last packet in a transmission contains this.
 
-  def __init__(self, port=DEST_PORT):
+  def __init__(self, listen=INADDR_ANY_DOTTED, port=DEST_PORT):
     localport = port
 
-    self.udp_sock_world = socket(AF_INET, SOCK_DGRAM)
-    self.udp_sock_world.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.udp_sock_world.bind((self.INADDR_ANY_DOTTED, int(DEST_PORT)))
+    self.udp_recv_port = socket(AF_INET, SOCK_DGRAM)   # world and laser talks to us
+    self.udp_recv_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.udp_recv_port.bind((listen, int(DEST_PORT)))
 
-    self.udp_sock_laser = socket(AF_INET, SOCK_DGRAM)
-    self.udp_sock_laser.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.udp_sock_laser.bind((self.INADDR_ANY_DOTTED, int(SO_REUSEADDR)))
+    self.udp_send_port = socket(AF_INET, SOCK_DGRAM)    # we talk to laser and world
+    self.udp_send_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.udp_send_port.bind((listen, int(SOURCE_PORT)))
 
   def find_end_token(data):
     if FIN_TOKEN in data:
