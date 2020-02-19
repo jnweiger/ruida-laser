@@ -61,13 +61,13 @@ class RuidaProxyServer():
     self.dest = dest
 
     self.udp_backend_port = socket(AF_INET, SOCK_DGRAM)   # communication with laser
-    self.udp_backend_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.udp_backend_port.bind((listen, int(CLIENT_PORT)))
+    self.udp_backend_port.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+    self.udp_backend_port.bind((listen, int(self.CLIENT_PORT)))
 
     self.udp_frontend_port = socket(AF_INET, SOCK_DGRAM)    # communication with the world
-    self.udp_frontend_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.udp_frontend_port.bind((listen, int(RUIDA_PORT)))
-    print("RudiaPrody v%s listening on %s:{%d,%d} ..." % (__version__, listen, CLIENT_PORT, RUIDA_PORT))
+    self.udp_frontend_port.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+    self.udp_frontend_port.bind((listen, int(self.RUIDA_PORT)))
+    print("RudiaPrody v%s listening on %s:{%d,%d} ..." % (__version__, listen, self.CLIENT_PORT, self.RUIDA_PORT))
 
 
 listen_addr = INADDR_ANY_DOTTED
