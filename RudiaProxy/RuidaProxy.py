@@ -44,6 +44,7 @@ if sys.version_info.major < 3:
 
 if len(sys.argv) < 3:
   print("Usage: %s RUIDA_IP_ADDR [LISTEN_IP_ADDR]" % sys.argv[0])
+  print("\nExample for fln:\n%s 172.22.30.12 172.22.30.50" % sys.argv[0])
   sys.exit(1)
 
 class RuidaProxyServer():
