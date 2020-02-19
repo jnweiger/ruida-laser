@@ -22,14 +22,21 @@
 #   0xc6 if all is well, 0x46 if checksum error.
 # - IF a UDP Stream already exists, additional incoming packets are NaK'ed with 0x46
 #
-# Packets are alway sent from port 50200 and are always received by port 40200.
+# Clients send packets from port 50200 and the laser receives them at port 40200.
+# Responses from the laser are sent from port 40200 and are received by the client at port 50200.
 #
 # Prepare a loopback network like this:
-#   sudo ifconfig lo:2 172.22.30.50 up       # fababnbg
+#   sudo ifconfig lo:2 172.22.30.50 netmask 255.255.255.0 up       # fababnbg
+#
+# 2020-02-18, v0.1, jw  - initial draught.
 
+__version__ = "0.1"
 
 import os, sys, time, select
 from socket import *
+
+INADDR_ANY_DOTTED = '0.0.0.0'   # bind to all interfaces.
+BUSY_TIMEOUT = 10.000           # seconds. A pause that long ends a UDP Stream.
 
 if sys.version_info.major < 3:
   print("Need python3 for "+sys.argv[0])
@@ -40,114 +47,96 @@ if len(sys.argv) < 3:
   sys.exit(1)
 
 class RuidaProxyServer():
-  BUSY_TIMEOUT = 10000    # ends a UDP Stream.
-  INADDR_ANY_DOTTED = '0.0.0.0'  # bind to all interfaces.
-  SOURCE_PORT = 40200     # used by rdworks in Windows
-  DEST_PORT   = 50200     # Ruida Board
+  CLIENT_PORT = 40200      # used by rdworks in Windows to send and receive.
+  RUIDA_PORT  = 50200      # Ruida Board receives and sends here.
   verbose = True          # babble while working
   ACK_BYTE = 0xc6
+  ACK_TOKEN = b"\xc6"
   NACK_BYTE = 0x46	  # csum error. FIXME: do we kow other error codes?
-  CHUNK_SZ = 10000	  # max size per udp packet
-  FIN_TOKEN = "\xd7"      # the last packet in a transmission contains this.
+  NACK_TOKEN = b"\x46"
+  FIN_TOKEN = b"\xd7"      # the last packet in a transmission contains this.
+  CHUNK_SZ = 4096       # whatever ...
 
-  def __init__(self, listen=INADDR_ANY_DOTTED, port=DEST_PORT):
-    localport = port
+  def __init__(self, listen=INADDR_ANY_DOTTED, dest="172.22.30.12"):
+    self.dest = dest
 
-    self.udp_recv_port = socket(AF_INET, SOCK_DGRAM)   # world and laser talks to us
-    self.udp_recv_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.udp_recv_port.bind((listen, int(DEST_PORT)))
+    self.udp_backend_port = socket(AF_INET, SOCK_DGRAM)   # communication with laser
+    self.udp_backend_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.udp_backend_port.bind((listen, int(CLIENT_PORT)))
 
-    self.udp_send_port = socket(AF_INET, SOCK_DGRAM)    # we talk to laser and world
-    self.udp_send_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.udp_send_port.bind((listen, int(SOURCE_PORT)))
-
-  def find_end_token(data):
-    if FIN_TOKEN in data:
-      return True
-    False
+    self.udp_frontend_port = socket(AF_INET, SOCK_DGRAM)    # communication with the world
+    self.udp_frontend_port.setsockopt(SOL_SOCKET, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.udp_frontend_port.bind((listen, int(RUIDA_PORT)))
+    print("RudiaPrody v%s listening on %s:{%d,%d} ..." % (__version__, listen, CLIENT_PORT, RUIDA_PORT))
 
 
-proxy = RuidaProxyServer()
-last_pkg_tstamp = 0     # seconds since epoch
-last_sender_addr = 0    # the one remote machine, that "currently" sends.
-stream_busy = False     # True until we find_end_token()
+listen_addr = INADDR_ANY_DOTTED
+if len(sys.argv) > 2:
+  listen_addr = sys.argv[2]
+
+proxy = RuidaProxyServer(listen=listen_addr, dest=sys.argv[1])
+last_pkg_tstamp = 0             # seconds since epoch
+last_client_ip = None         # the one remote machine, that "currently" sends.
 
 
+ending = False
 while True:
-  ending = False
-  inputs = [proxy.udp_sock_laser, proxy.udp_sock_world]
+  inputs = [proxy.udp_frontend_port, proxy.udp_backend_port]
 
   try:
     inputready,outputready,exceptready = select.select(inputs, [], [])
   except select.error as e:
+    print("select.error", e)
     break
   except socket.error as e:
+    print("socket.error", e)
     break
 
-
-  if proxy.udp_sock_world in inputready:
+  if proxy.udp_backend_port in inputready:
+    # laser is speaking
+    data, addr = proxy.udp_backend_port.recvfrom(proxy.CHUNK_SZ)
     now = time.time()
-    data, sender_addr = proxy.udp_sock_world.recvfrom(proxy.CHUNK_SZ)
-    if (now - last_pkg_tstamp < BUSY_TIMEOUT):
-        # we forward packets that come from the same sender than before
-        # we reject packets from different sender.
+    if last_client_ip is not None and addr[0] == ruida.dest:
+      proxy.udp_frontend_port.sendto(data, (last_client_ip, proxy.CLIENT_PORT))       # forward what laser replies to client ...
+      if ending:
+        print("laser replied after FIN_TOKEN")
+        last_client_ip = None
     else:
-        # timeout reached. 
-        # we accept any other sender as new source.
-        # if the stream is still busy, we send an artificial fin token to the laser, then we start forwarding.
-        if stream_busy:
-
-
-  if proxy.tcp_sock in inputready:
-    conn, sender_addr = proxy.tcp_sock.accept()
-    if proxy.busy:
-      try:
-        conn.send(proxy.NACK_BYTE)
-      except:
-        pass
-      try:
-        conn.shutdown(socket.SHUT_RDWR)
-      except:
-        pass
-    else:
-      # not yet busy
-      proxy.tcp_conn = conn
-      proxy.busy = True
-      proxy.output = ( 0, sender_addr, "out_"+str(time.time())+".rd")
-      proxy.output[0] = open(proxy.output[2], "w")
-  # tcp_sock
-
-  if proxy.busy and proxy.tcp_conn is not None and proxy.tcp_conn.fileno() in inputready:
-    data = proxy.udp_sock.recv(proxy.CHUNK_SZ)
-    proxy.output[0].write(data)
-    proxy.tcp_conn.send(proxy.ACK_BYTE)
-    ending = proxy.find_end_token(data)
-  # tcp_conn
-
-  if proxy.udp_sock in inputready:
-    data, sender_addr = proxy.udp_sock.recvfrom(proxy.CHUNK_SZ)
-    if proxy.busy:
-      if proxy.output[1] == sender_addr:
-        proxy.output[0].write(data)
-        proxy.udp_sock.sendto(sender_addr, proxy.ACK_BYTE)
-        ending = proxy.find_end_token(data)
+      if last_client_ip is None:
+        print("sending NACK to laser, no connected client known.")
       else:
-        try:
-          proxy.udp_sock.sendto(sender_addr, proxy.NACK_BYTE)
-        except:
-          pass
-    else:
-      # not yet busy
-      proxy.busy = True
-      proxy.output = ( 0, sender_addr, "out_"+str(time.time())+".rd")
-      proxy.output[0] = open(proxy.output[2], "w")
-      proxy.output[0].write(data)
-      proxy.udp_sock.sendto(sender_addr, proxy.ACK_BYTE)
-      ending = proxy.find_end_token(data)
-  # udp_sock
+        print("sending NACK to unknon 'laser'. Go away,", addr)
+      proxy.udp_backend_port.sendto(proxy.NACK_TOKEN, addr)       # we don't know where to route this...
 
-  if ending:
-    proxy.output[0].close()
-    proxy.output = None
-    proxy.busy = False
+  elif proxy.udp_frontend_port in inputready:
+    data, addr = proxy.udp_frontend_port.recvfrom(proxy.CHUNK_SZ)
+    if now - last_pkg_tstamp > BUSY_TIMEOUT:
+      if last_client_ip != None:
+        print("long pause. Disconnecting", last_client_ip)
+        last_client_ip = None
+
+    # a new client is talking to us
+    if last_client_ip is None:
+      last_client_ip = addr[0]
+
+    if addr[0] == last_client_ip:
+      # yes, please go ahead
+      last_pkg_tstamp = now
+      proxy.udp_backend_port.sendto(data, (proxy.dest, proxy.RUIDA_PORT))             # forward what client says to laser ...
+      if data == proxy.FIN_TOKEN:
+        print("FIN_TOKEN seen from client")
+        ending = True
+      else:
+        ending = False
+    else:
+      print("who are you, ", addr, "? -- go away, we are busy with ", last_client_ip)
+      proxy.udp_frontend_port.sendto(proxy.NACK_TOKEN, addr)       # you shall not pass.
+
+  else:
+    # select timeout?
+    print(".", end="")
+    if now - last_pkg_tstamp > BUSY_TIMEOUT:
+      if last_client_ip != None:
+        print("long pause. Disconnecting", last_client_ip)
+        last_client_ip = None
 
