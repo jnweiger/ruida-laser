@@ -29,8 +29,11 @@
 #   sudo ifconfig lo:2 172.22.30.50 netmask 255.255.255.0 up       # fababnbg
 #
 # 2020-02-18, v0.1, jw  - initial draught.
+# 2020-02-19, v0.2, jw  - descrambling added, but unused. We find the FIN_RAW packet as is.
 
-__version__ = "0.1"
+
+__version__ = "0.2"
+
 
 import os, sys, time, select
 from socket import *
@@ -39,12 +42,12 @@ INADDR_ANY_DOTTED = '0.0.0.0'   # bind to all interfaces.
 BUSY_TIMEOUT = 10.000           # seconds. A pause that long ends a UDP Stream.
 
 if sys.version_info.major < 3:
-  print("Need python3 for "+sys.argv[0])
+  print("Need python3 for "+sys.argv[0], flush=True)
   sys.exit(1)
 
 if len(sys.argv) < 3:
-  print("Usage: %s RUIDA_IP_ADDR [LISTEN_IP_ADDR]" % sys.argv[0])
-  print("\nExample for fln:\n%s 172.22.30.12 172.22.30.50" % sys.argv[0])
+  print("Usage: %s RUIDA_IP_ADDR [LISTEN_IP_ADDR]" % sys.argv[0], flush=True)
+  print("\nExample for fln:\npython3 %s 172.22.30.12 172.22.30.50" % sys.argv[0], flush=True)
   sys.exit(1)
 
 class RuidaProxyServer():
@@ -55,7 +58,9 @@ class RuidaProxyServer():
   ACK_TOKEN = b"\xc6"
   NACK_BYTE = 0x46	  # csum error. FIXME: do we kow other error codes?
   NACK_TOKEN = b"\x46"
-  FIN_TOKEN = b"\xd7"      # the last packet in a transmission contains this.
+  FIN_TOKEN = b"\xd7"      # the last packet in a transmission ends with this
+  FIN_RAW = bytes([0, 96, 96])  # a fin packet, with checksum, scrambled.
+  FIN_BYTE = 0xd7          # the last packet in a transmission ends with this.
   CHUNK_SZ = 4096       # whatever ...
 
   def __init__(self, listen=INADDR_ANY_DOTTED, dest="172.22.30.12"):
@@ -68,7 +73,37 @@ class RuidaProxyServer():
     self.udp_frontend_port = socket(AF_INET, SOCK_DGRAM)    # communication with the world
     self.udp_frontend_port.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     self.udp_frontend_port.bind((listen, int(self.RUIDA_PORT)))
-    print("RudiaPrody v%s listening on %s:{%d,%d} ..." % (__version__, listen, self.CLIENT_PORT, self.RUIDA_PORT))
+    print("RudiaPrody v%s listening on %s:{%d,%d} ..." % (__version__, listen, self.CLIENT_PORT, self.RUIDA_PORT), flush=True)
+
+  def unscramble(self, b):
+    """ unscramble a single byte for reading from *.rd files """
+    res_b=b-1
+    if res_b<0: res_b+=0x100
+    res_b^=0x88
+    fb=res_b&0x80
+    lb=res_b&1
+    res_b=res_b-fb-lb
+    res_b|=lb<<7
+    res_b|=fb>>7
+    return res_b
+
+
+  def unscramble_bytes(self, data):
+    if sys.version_info.major < 3:
+      return bytes([self.unscramble(ord(b)) for b in data])
+    else:
+      return bytes([self.unscramble(b) for b in data])
+
+
+  def check_checksum(self, data):
+    sum = 0
+    for i in bytes(data[2:]):
+      sum += i & 0xff     # unsigned
+    seen = ((data[0] & 0xff) << 8) + (data[1] & 0xff)
+    if seen == sum:
+      return data[2:]
+    return None
+
 
 
 listen_addr = INADDR_ANY_DOTTED
@@ -85,35 +120,42 @@ while True:
   inputs = [proxy.udp_frontend_port, proxy.udp_backend_port]
 
   try:
-    inputready,outputready,exceptready = select.select(inputs, [], [])
+    inputready,outputready,exceptready = select.select(inputs, [], [], BUSY_TIMEOUT)
   except select.error as e:
-    print("select.error", e)
+    print("select.error", e, flush=True)
     break
   except socket.error as e:
-    print("socket.error", e)
+    print("socket.error", e, flush=True)
     break
 
+  now = time.time()
   if proxy.udp_backend_port in inputready:
     # laser is speaking
     data, addr = proxy.udp_backend_port.recvfrom(proxy.CHUNK_SZ)
-    now = time.time()
-    if last_client_ip is not None and addr[0] == ruida.dest:
+    if last_client_ip is not None and addr[0] == proxy.dest:
       proxy.udp_frontend_port.sendto(data, (last_client_ip, proxy.CLIENT_PORT))       # forward what laser replies to client ...
+      print("<", end="", flush=True)
       if ending:
-        print("laser replied after FIN_TOKEN")
+        print("]", flush=True)
         last_client_ip = None
     else:
       if last_client_ip is None:
-        print("sending NACK to laser, no connected client known.")
+        print("sending NACK to laser, no connected client known.", flush=True)
       else:
-        print("sending NACK to unknon 'laser'. Go away,", addr)
+        print("sending NACK to unknon 'laser'. Go away,", addr, flush=True)
       proxy.udp_backend_port.sendto(proxy.NACK_TOKEN, addr)       # we don't know where to route this...
 
   elif proxy.udp_frontend_port in inputready:
     data, addr = proxy.udp_frontend_port.recvfrom(proxy.CHUNK_SZ)
+    # buf = proxy.check_checksum(data)
+    # if buf is None:
+    #   print("bad checksum from %s" % (addr))
+    #   proxy.udp_frontend_port.sendto(proxy.NACK_TOKEN, addr)       # you shall not pass.
+    # else:
+    #   print("seen ", proxy.unscramble_bytes(bug))
     if now - last_pkg_tstamp > BUSY_TIMEOUT:
       if last_client_ip != None:
-        print("long pause. Disconnecting", last_client_ip)
+        print("long pause. Disconnecting", last_client_ip, flush=True)
         last_client_ip = None
 
     # a new client is talking to us
@@ -124,20 +166,21 @@ while True:
       # yes, please go ahead
       last_pkg_tstamp = now
       proxy.udp_backend_port.sendto(data, (proxy.dest, proxy.RUIDA_PORT))             # forward what client says to laser ...
-      if data == proxy.FIN_TOKEN:
-        print("FIN_TOKEN seen from client")
+      print(">", end="", flush=True)
+      if data == proxy.FIN_RAW:
+        print("[", end="", flush=True)
         ending = True
       else:
         ending = False
     else:
-      print("who are you, ", addr, "? -- go away, we are busy with ", last_client_ip)
+      print("who are you, ", addr, "? -- go away, we are busy with ", last_client_ip, flush=True)
       proxy.udp_frontend_port.sendto(proxy.NACK_TOKEN, addr)       # you shall not pass.
 
   else:
     # select timeout?
-    print(".", end="")
+    print(".", end="", flush=True)
     if now - last_pkg_tstamp > BUSY_TIMEOUT:
       if last_client_ip != None:
-        print("long pause. Disconnecting", last_client_ip)
+        print("long pause. Disconnecting", last_client_ip, flush=True)
         last_client_ip = None
 
