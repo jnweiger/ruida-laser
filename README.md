@@ -1,7 +1,7 @@
 # ruida-laser
 Understanding the protocol between RDWorks, usb-stick, ethernet, and laser.
 
-## [References](#references)
+## References [§](#references)
 
 * http://wiki.fablab-nuernberg.de/w/Diskussion:Nova_35
 * http://stefan.schuermans.info/rdcam/
