@@ -25,69 +25,110 @@ class RuidaParser():
     self._file  = file
 
 
-  def skip_bytes(self, n, desc=None):
+  def decode_number(self, x):
+    "used with a bytes() array of length 5"
+    fak=1
+    res=0
+    for b in reversed(x):
+      res+=fak*b
+      fak*=0x80
+    return 0.0001 * res
+
+  def decode_relcoord(self, x):
+    """
+    using the first two elements of array x
+    relative position in micrometer; signed (2s complement)
+    """
+    r = x[0] << 8
+    r += x[1]
+    if r > 16383 or r < 0:
+      raise ValueError("Not a rel coord: " + repr(x[0:2]))
+    if r > 8191: return 0.001 * (r-16384)
+    else:        return 0.001 * r
+
+  def arg_abs(self, off=0):
+    buf = self._buf[off:off+5]
+    return off+5, self.decode_relcoord(buf)
+
+  def arg_rel(self, off=0):
+    buf = self._buf[off:off+2]
+    return off+2, self.decode_relcoord(buf)
+
+
+  def skip_msg(self, n, desc=None):
     r = []
     for i in range(n):
       r.append("%02x" % self._buf[i])
-    return n, " ".join(r)
+    return " ".join(r)
+
+  def skip_bytes(self, n, desc=None):
+    return n, self.skip_msg(n, desc)
 
 
   def laser_offset(self, n, desc=None):
-    return n, "laser_offset: " + self.skip_bytes(n, desc)
+    return n, "laser_offset: " + self.skip_msg(n, desc)
 
   def bb_top_left(self, n, desc=None):
-    return n, "bb_top_left: " + self.skip_bytes(n, desc)
+    return n, "bb_top_left: " + self.skip_msg(n, desc)
 
   def bb_bot_right(self, n, desc=None):
-    return n, "bb_bot_right: " + self.skip_bytes(n, desc)
+    return n, "bb_bot_right: " + self.skip_msg(n, desc)
 
   def feeding(self, n, desc=None):
-    return n, "feeding: " + self.skip_bytes(n, desc)
+    return n, "feeding: " + self.skip_msg(n, desc)
 
   def layer_speed(self, n, desc=None):
-    return n, "layer_speed: " + self.skip_bytes(n, desc)
+    return n, "layer_speed: " + self.skip_msg(n, desc)
 
   def laser_freq(self, n, desc=None):
-    return n, "laser_freq: " + self.skip_bytes(n, desc)
+    return n, "laser_freq: " + self.skip_msg(n, desc)
 
   def laser_min_pow(self, n, desc=None):
-    return n, "laser_min_pow: " + self.skip_bytes(n, desc)
+    return n, "laser_min_pow: " + self.skip_msg(n, desc)
 
   def laser_max_pow(self, n, desc=None):
-    return n, "laser_max_pow: " + self.skip_bytes(n, desc)
+    return n, "laser_max_pow: " + self.skip_msg(n, desc)
 
   def laser_min_pow_lay(self, n, desc=None):
-    return n, "laser_min_pow_lay: " + self.skip_bytes(n, desc)
+    return n, "laser_min_pow_lay: " + self.skip_msg(n, desc)
 
   def laser_max_pow_lay(self, n, desc=None):
-    return n, "laser_max_pow_lay: " + self.skip_bytes(n, desc)
+    return n, "laser_max_pow_lay: " + self.skip_msg(n, desc)
 
   def cut_through_pow(self, n, desc=None):
-    return n, "cut_through_pow: " + self.skip_bytes(n, desc)
+    return n, "cut_through_pow: " + self.skip_msg(n, desc)
 
   def move_abs(self, n, desc=None):
-    return n, "move_abs: " + self.skip_bytes(n, desc)
+    off, x = self.arg_abs()
+    off, y = self.arg_abs(off)
+    return off, "move_ab(%d, %d)" % (x, y)
 
   def move_rel(self, n, desc=None):
-    return n, "move_rel: " + self.skip_bytes(n, desc)
+    off, x = self.arg_rel()
+    off, y = self.arg_rel(off)
+    return off, "move_rel%d, %d)" % (x, y)
 
   def cut_abs(self, n, desc=None):
-    return n, "cut_abs: " + self.skip_bytes(n, desc)
+    off, x = self.arg_abs()
+    off, y = self.arg_abs(off)
+    return off, "cut_abs%d, %d)" % (x, y)
 
   def cut_rel(self, n, desc=None):
-    return n, "cut_rel: " + self.skip_bytes(n, desc)
+    off, x = self.arg_rel()
+    off, y = self.arg_rel(off)
+    return off, "cut_rel(%d, %d)" % (x, y)
 
   def cut_horiz(self, n, desc=None):
-    return n, "cut_horiz: " + self.skip_bytes(n, desc)
+    return n, "cut_horiz: " + self.skip_msg(n, desc)
 
   def cut_vert(self, n, desc=None):
-    return n, "cut_vert: " + self.skip_bytes(n, desc)
+    return n, "cut_vert: " + self.skip_msg(n, desc)
 
   def move_horiz(self, n, desc=None):
-    return n, "move_horiz: " + self.skip_bytes(n, desc)
+    return n, "move_horiz: " + self.skip_msg(n, desc)
 
   def move_vert(self, n, desc=None):
-    return n, "move_vert: " + self.skip_bytes(n, desc)
+    return n, "move_vert: " + self.skip_msg(n, desc)
 
 
   rd_decoder_table = {
@@ -229,9 +270,9 @@ class RuidaParser():
     elif len(c) >= 4:
       consumed,msg = c[1](self, c[2], c[3:])
       if msg is None:
-        msg += " (" + c[3] + ")"
-      else:
         msg = "(" + c[3] + ")"
+      else:
+        msg += " (" + c[3] + ")"
     return consumed,msg
 
 
@@ -258,24 +299,24 @@ class RuidaParser():
             out = "%5d: %02x %02x %s" % (pos, b0, b1, c[0])
             consumed,msg = self.token_method(c)
             if msg is not None: out += " " + msg;
-            print(out)
+            print(out, file=sys.stderr)
             self._buf = self._buf[consumed:]
             pos += consumed
 
           else:
-            print("%5d: %02x %02x second byte not defined in rd_dec" % (pos, b0, self._buf[0]))
+            print("%5d: %02x %02x second byte not defined in rd_dec" % (pos, b0, self._buf[0]), file=sys.stderr)
 
         else:
           # single byte command.
-          out = "%5d: %02x %s" % (pos, b0, c[0])
+          out = "%5d: %02x %s" % (pos, b0, tok[0])
           consumed,msg = self.token_method(tok)
           if msg is not None: out += " " + msg;
-          print(out)
+          print(out, file=sys.stderr)
           self._buf = self._buf[consumed:]
           pos += consumed
 
       else:
-        print("%5d: %02x ERROR: ----------- token not found in rd_dec" % (pos, b0))
+        print("%5d: %02x ERROR: ----------- token not found in rd_dec" % (pos, b0), file=sys.stderr)
 
 
 p = RuidaParser(buf)
