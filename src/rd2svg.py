@@ -6,6 +6,8 @@
 #  sudo pip3 install svg.py
 #  sudo pip3 install typing_extensions
 #
+# 2022-02-06, v0.1, jw:       initial draught: can tokenize square_tri_test.rd
+#
 import sys
 import svg
 import ruida
