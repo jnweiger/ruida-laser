@@ -71,12 +71,30 @@ def cut_rel(buf, desc=None):
 def cut_horiz(buf, desc=None):
   return "cut_horiz: " + skip_bytes(buf, desc)
 
+def cut_vert(buf, desc=None):
+  return "cut_vert: " + skip_bytes(buf, desc)
+
+def move_horiz(buf, desc=None):
+  return "move_horiz: " + skip_bytes(buf, desc)
+
+def move_vert(buf, desc=None):
+  return "move_vert: " + skip_bytes(buf, desc)
+
 rd_decoder_table = {
   0x88: ["Mov_Abs", move_abs, 5+5, ":abs, :abs" ],
   0x89: ["Mov_Rel", move_rel, 2+2, ":rel, :rel" ],
+  0x8a: ["Mov_Horiz", move_horiz, 2, ":rel" ],
+  0x8b: ["Mov_Vert", move_vert, 2, ":rel" ],
   0xa8: ["Cut_Abs", cut_abs, 5+5, ":abs, :abs" ],
   0xa9: ["Cut_Rel", cut_rel, 2+2, ":rel, :rel" ],
   0xaa: ["Cut_Horiz", cut_horiz, 2, ":rel" ],
+  0xab: ["Cut_Vert", cut_vert, 2, ":rel" ],
+  0xc0: ["C0", skip_bytes, 2 ],
+  0xc1: ["C1", skip_bytes, 2 ],
+  0xc2: ["C2", skip_bytes, 2 ],
+  0xc3: ["C3", skip_bytes, 2 ],
+  0xc4: ["C4", skip_bytes, 2 ],
+  0xc5: ["C5", skip_bytes, 2 ],
   0xc6:
     {
       0x01: ["Laser_1_Min_Pow_C6_01", laser_min_pow, 2, ":power", 1],
@@ -106,6 +124,8 @@ rd_decoder_table = {
       0x56: ["Cut_through_power4", cut_through_pow, 2, ":power", 4],
       0x60: ["Laser_Freq", laser_freq, 1+1+5, ":laser, 0x00, :freq" ]    
     },
+  0xc7: ["C7", skip_bytes, 2 ],
+  0xc8: ["C8", skip_bytes, 2 ],
   0xc9:
     { 
       0x02: ["Speed_C9", skip_bytes, 5, ":speed" ],
@@ -130,6 +150,10 @@ rd_decoder_table = {
       0x12: ["UploadFollows"],
     },
   0xda: [ "Work_Interval", skip_bytes, 3+5+5, "-3, :meter, :meter" ],
+  0xe6:
+    {
+      0x01: ["E6_01"]
+    },
   0xe7:
     { 
       0x00: ["Stop"],
@@ -153,6 +177,11 @@ rd_decoder_table = {
       0x60: ["E7 60", skip_bytes, 1],
       0x61: ["Layer_Top_Left_E7_61", skip_bytes, 1+5+5, ":layer, :abs, :abs"], 
       0x62: ["Layer_Bottom_Right_E7_62", skip_bytes, 1+5+5, ":layer, :abs, :abs"] 
+    },
+  0xe8:
+    {
+      0x01: ["FileStore", skip_bytes, 1+1, "0x00, :number, :string" ],
+      0x02: ["PrepFilename"],
     },
   0xea: ["EA", skip_bytes, 1],
   0xeb: ["Finish"],
