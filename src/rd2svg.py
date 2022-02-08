@@ -32,103 +32,143 @@ class RuidaParser():
     for b in reversed(x):
       res+=fak*b
       fak*=0x80
-    return 0.0001 * res
+    return 0.001 * res
 
   def decode_relcoord(self, x):
     """
     using the first two elements of array x
     relative position in micrometer; signed (2s complement)
     """
-    r = x[0] << 8
-    r += x[1]
+    r = (x[0] << 7) + x[1]
     if r > 16383 or r < 0:
       raise ValueError("Not a rel coord: " + repr(x[0:2]))
     if r > 8191: return 0.001 * (r-16384)
     else:        return 0.001 * r
 
+  def decode_percent(self, x):
+    """
+    The magic constant is 1/100 of 14bit all 1s.
+    """
+    return int( ( (x[0]<<7) + x[1] ) * 100/0x3fff + .5)
+
+  def arg_perc(self, off=0):
+    buf = self._buf[off:off+2]
+    return off+2, self.decode_percent(buf)
+
   def arg_abs(self, off=0):
     buf = self._buf[off:off+5]
-    return off+5, self.decode_relcoord(buf)
+    return off+5, self.decode_number(buf)
 
   def arg_rel(self, off=0):
     buf = self._buf[off:off+2]
     return off+2, self.decode_relcoord(buf)
 
 
-  def skip_msg(self, n, desc=None):
+  def skip_msg(self, n, buf=None):
+    if buf is None: buf = self._buf
     r = []
     for i in range(n):
-      r.append("%02x" % self._buf[i])
+      r.append("%02x" % buf[i])
     return " ".join(r)
 
   def skip_bytes(self, n, desc=None):
-    return n, self.skip_msg(n, desc)
+    return n, self.skip_msg(n)
 
 
   def laser_offset(self, n, desc=None):
-    return n, "laser_offset: " + self.skip_msg(n, desc)
+    return n, "laser_offset: " + self.skip_msg(n)
 
   def bb_top_left(self, n, desc=None):
-    return n, "bb_top_left: " + self.skip_msg(n, desc)
+    off, x = self.arg_abs()
+    off, y = self.arg_abs(off)
+    return off, "bb_top_left(%.8gmm, %.8gmm)" % (x, y)
+
+  def lay_top_left(self, n, desc=None):
+    l = self._buf[0]
+    off, x = self.arg_abs(1)
+    off, y = self.arg_abs(off)
+    return off, "lay_top_left(%d, %.8gmm, %.8gmm)" % (l, x, y)
 
   def bb_bot_right(self, n, desc=None):
-    return n, "bb_bot_right: " + self.skip_msg(n, desc)
+    off, x = self.arg_abs()
+    off, y = self.arg_abs(off)
+    return off, "bb_bot_right(%.8gmm, %.8gmm)" % (x, y)
+
+  def lay_bot_right(self, n, desc=None):
+    l = self._buf[0]
+    off, x = self.arg_abs(1)
+    off, y = self.arg_abs(off)
+    return off, "lay_bot_right(%d, %.8gmm, %.8gmm)" % (l, x, y)
 
   def feeding(self, n, desc=None):
-    return n, "feeding: " + self.skip_msg(n, desc)
+    off, x = self.arg_abs()
+    off, y = self.arg_abs(off)
+    return off, "feeding(%.8gmm, %.8gmm)" % (x, y)
 
   def layer_speed(self, n, desc=None):
-    return n, "layer_speed: " + self.skip_msg(n, desc)
+    l = self._buf[0]
+    off, x = self.arg_abs(1)
+    return off, "layer_speed(%d, %.8gmm)" % (l, x)
 
   def laser_freq(self, n, desc=None):
-    return n, "laser_freq: " + self.skip_msg(n, desc)
+    return n, "laser_freq: " + self.skip_msg(n)
 
   def laser_min_pow(self, n, desc=None):
-    return n, "laser_min_pow: " + self.skip_msg(n, desc)
+    off, x = self.arg_perc()
+    return off, "laser_min_pow(%d, %d%%)" % (desc[1], x)
 
   def laser_max_pow(self, n, desc=None):
-    return n, "laser_max_pow: " + self.skip_msg(n, desc)
+    off, x = self.arg_perc()
+    return off, "laser_max_pow(%d, %d%%)" % (desc[1], x)
 
   def laser_min_pow_lay(self, n, desc=None):
-    return n, "laser_min_pow_lay: " + self.skip_msg(n, desc)
+    l = self._buf[0]
+    off, x = self.arg_perc(1)
+    return off, "laser_min_pow_lay(%d, %d, %d%%)" % (desc[1], l, x)
 
   def laser_max_pow_lay(self, n, desc=None):
-    return n, "laser_max_pow_lay: " + self.skip_msg(n, desc)
+    l = self._buf[0]
+    off, x = self.arg_perc(1)
+    return off, "laser_max_pow_lay(%d, %d, %d%%)" % (desc[1], l, x)
 
   def cut_through_pow(self, n, desc=None):
-    return n, "cut_through_pow: " + self.skip_msg(n, desc)
+    return n, "cut_through_pow: " + self.skip_msg(n)
 
   def move_abs(self, n, desc=None):
     off, x = self.arg_abs()
     off, y = self.arg_abs(off)
-    return off, "move_ab(%d, %d)" % (x, y)
+    return off, "move_abs(%.8gmm, %.8gmm)" % (x, y)
 
   def move_rel(self, n, desc=None):
     off, x = self.arg_rel()
     off, y = self.arg_rel(off)
-    return off, "move_rel%d, %d)" % (x, y)
+    return off, "move_rel(%.8gmm, %.8gmm)" % (x, y)
 
   def cut_abs(self, n, desc=None):
     off, x = self.arg_abs()
     off, y = self.arg_abs(off)
-    return off, "cut_abs%d, %d)" % (x, y)
+    return off, "cut_abs(%.8gmm, %.8gmm)" % (x, y)
 
   def cut_rel(self, n, desc=None):
     off, x = self.arg_rel()
     off, y = self.arg_rel(off)
-    return off, "cut_rel(%d, %d)" % (x, y)
+    return off, "cut_rel(%.8gmm, %.8gmm)" % (x, y)
 
   def cut_horiz(self, n, desc=None):
-    return n, "cut_horiz: " + self.skip_msg(n, desc)
+    off, x = self.arg_rel()
+    return n, "cut_horiz(%.8gmm)" % x
 
   def cut_vert(self, n, desc=None):
-    return n, "cut_vert: " + self.skip_msg(n, desc)
+    off, x = self.arg_rel()
+    return n, "cut_vert(%.8gmm)" % x
 
   def move_horiz(self, n, desc=None):
-    return n, "move_horiz: " + self.skip_msg(n, desc)
+    off, x = self.arg_rel()
+    return n, "move_horiz(%.8gmm)" % x
 
   def move_vert(self, n, desc=None):
-    return n, "move_vert: " + self.skip_msg(n, desc)
+    off, x = self.arg_rel()
+    return n, "move_vert(%.8gmm)" % x
 
 
   rd_decoder_table = {
@@ -219,15 +259,15 @@ class RuidaParser():
         0x17: ["Bottom_Right_E7_17", skip_bytes, 5+5, ":abs, :abs"],
         0x23: ["E7 23", skip_bytes, 5+5, ":abs, :abs"],
         0x24: ["E7 24", skip_bytes, 1],
-        0x50: ["Bounding_Box_Top_Left", skip_bytes, 5+5, ":abs, :abs"],
-        0x51: ["Bounding_Box_Bottom_Right", skip_bytes, 5+5, ":abs, :abs"],
-        0x52: ["Layer_Top_Left_E7_52", skip_bytes, 1+5+5, ":layer, :abs, :abs"],
-        0x53: ["Layer_Bottom_Right_E7_53", skip_bytes, 1+5+5, ":layer, :abs, :abs"],
+        0x50: ["Bounding_Box_Top_Left", bb_top_left, 5+5, ":abs, :abs"],
+        0x51: ["Bounding_Box_Bottom_Right", bb_bot_right, 5+5, ":abs, :abs"],
+        0x52: ["Layer_Top_Left_E7_52", lay_top_left, 1+5+5, ":layer, :abs, :abs"],
+        0x53: ["Layer_Bottom_Right_E7_53", lay_bot_right, 1+5+5, ":layer, :abs, :abs"],
         0x54: ["Pen_Draw_Y", skip_bytes, 1+5, ":layer, :abs"],
         0x55: ["Laser_Y_Offset", skip_bytes, 1+5, ":layer, :abs"],
         0x60: ["E7 60", skip_bytes, 1],
-        0x61: ["Layer_Top_Left_E7_61", skip_bytes, 1+5+5, ":layer, :abs, :abs"],
-        0x62: ["Layer_Bottom_Right_E7_62", skip_bytes, 1+5+5, ":layer, :abs, :abs"]
+        0x61: ["Layer_Top_Left_E7_61", lay_top_left, 1+5+5, ":layer, :abs, :abs"],
+        0x62: ["Layer_Bottom_Right_E7_62", lay_bot_right, 1+5+5, ":layer, :abs, :abs"]
       },
     0xe8:
       {

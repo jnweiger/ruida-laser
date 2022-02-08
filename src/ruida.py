@@ -600,7 +600,7 @@ class Ruida():
     for b in reversed(x):
       res+=fak*b
       fak*=0x80
-    return 0.0001 * res
+    return 0.001 * res
 
   def encode_relcoord(self, n):
     """
@@ -618,8 +618,7 @@ class Ruida():
     using the first two elements of array x
     relative position in micrometer; signed (2s complement)
     """
-    r = x[0] << 8
-    r += x[1]
+    r = (x[0] << 7) + x[1]
     if r > 16383 or r < 0:
       raise ValueError("Not a rel coord: " + repr(x[0:2]))
     if r > 8191: return 0.001 * (r-16384)
