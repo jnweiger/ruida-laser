@@ -9,6 +9,7 @@
 # 2022-02-06, v0.1, jw:       Initial draught: can tokenize square_tri_test.rd
 # 2022-02-07, v0.2, jw:       Commands added, parameter decoding wip.
 # 2022-02-08, v0.3, jw:       Add layer info to paths.
+# 2022-02-08, v1.0, jw:       Can convert square_tri_test.rd into a nice svg.
 #
 import sys
 import svg
@@ -449,34 +450,40 @@ class RuidaParser():
 
 
 p = RuidaParser(buf)
-p.decode(debug=True)
+p.decode(debug=False)
 from pprint import pprint
-if True: pprint({ 'p':p._paths, 'bbox':p._bbox, 'las':p._laser}, stream=sys.stderr)
+if True: pprint({ 'p':p._paths, 'bbox':p._bbox, 'las':p._laser}, depth=5, stream=sys.stderr)
 
 ###
 
+d = []
+for path in p._paths:
+  n = len(path['data'])
+  for i in range(n):
+    v = path['data'][i]
+    if i == 0:
+      d.append(svg.M(v[0], v[1]))
+    elif i > 0 and i == n-1 and v == path['data'][0]:
+      d.append(svg.Z())
+    else:
+      d.append(svg.L(v[0], v[1]))
+
 paths = [
   svg.Path(
-                d=[
-                    svg.M(20, 230),
-                    svg.L(160, 200),
-                    svg.L(50, 360),
-                    svg.Z(),
-                    svg.M(30, 240),
-                    svg.L(140, 210),
-                    svg.L(50, 300),
-                    svg.Z(),
-                ],
+                d=d,
                 fill="none",
                 stroke="blue",
                 stroke_width=1,
             ),
 ]
 
+width=p._bbox[2]-p._bbox[0]
+height=p._bbox[3]-p._bbox[1]
+
 canvas = svg.SVG(
-  width="400mm",
-  height="360mm",
-  viewBox=svg.ViewBoxSpec(-40, 0, 400, 360),
+  width="%.8gmm" % width,
+  height="%.8gmm" % height,
+  viewBox=svg.ViewBoxSpec(p._bbox[0], p._bbox[1], width, height),
   xmlns="http://www.w3.org/2000/svg",
   elements=paths,
 )
