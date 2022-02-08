@@ -6,7 +6,9 @@
 #  sudo pip3 install svg.py
 #  sudo pip3 install typing_extensions
 #
-# 2022-02-06, v0.1, jw:       initial draught: can tokenize square_tri_test.rd
+# 2022-02-06, v0.1, jw:       Initial draught: can tokenize square_tri_test.rd
+# 2022-02-07, v0.2, jw:       Commands added, parameter decoding wip.
+# 2022-02-08, v0.3, jw:       Add layer info to paths.
 #
 import sys
 import svg
@@ -20,10 +22,46 @@ buf = rd.unscramble_bytes(fd.read())
 class RuidaParser():
   """
   """
-  def __init__(self, buf=None, file=None):
+  def __init__(self, buf=None, file=None, debug=False):
+    # input
     self._buf  = buf
     self._file  = file
+    # output
+    self._bbox = [ 10e9, 10e9, -10e9, -10e9 ]
+    self._paths = []
+    self._layer = {}
+    self._laser = {}
 
+  def get_layer(self, n):
+    if n not in self._layer:
+      self._layer[n] =  { 'n': n, 'bbox':[0,0,0,0], 'laser': {} }
+    return self._layer[n]
+
+  def get_laser(self, n, lay=None):
+    if lay is not None:
+      l = self.get_layer(lay)
+      if n not in l['laser']:
+        l['laser'][n] =  { 'n': n, 'offset':[0,0], 'layer':lay }
+      return l['laser'][n]
+    if n not in self._laser:
+      self._laser[n] =  { 'n': n, 'offset':[0,0] }
+    return self._laser[n]
+
+  def new_path(self):
+    p = { 'data':[], 'n':len(self._paths), 'layer':self._layer.get(self._prio, self._prio) }
+    self._paths.append(p)
+    return p['data']
+
+  def get_path(self):
+    if not self._paths:
+      self.new_path().append([0,0])   # Moveto missing? Assume we start at origin.
+    return self._paths[-1]['data']
+
+  def relative_xy(self, x=0, y=0):
+    if not self._paths:
+      self.new_path().append([0,0])   # Need current position, before anythingy? Assume we start at origin.
+    current = self._paths[-1]['data'][-1]
+    return [ current[0]+x, current[1]+y ]
 
   def decode_number(self, x):
     "used with a bytes() array of length 5"
@@ -75,30 +113,52 @@ class RuidaParser():
     return n, self.skip_msg(n)
 
 
+  def layer_priority(self, n, desc=None):
+    l = self._buf[0]
+    self._prio = l
+    return 1, "layer_priority(%d)" % l
+
   def laser_offset(self, n, desc=None):
-    return n, "laser_offset: " + self.skip_msg(n)
+    las = self.get_laser(desc[1])
+    off, x = self.arg_abs()
+    off, y = self.arg_abs(off)
+    las['offset'][0] = x
+    las['offset'][1] = y
+    return off, "laser_offset(%d, %.8gmm, %.8gmm)" % (las['n'], x, y)
 
   def bb_top_left(self, n, desc=None):
     off, x = self.arg_abs()
     off, y = self.arg_abs(off)
+    if x < self._bbox[0]: self._bbox[0] = x
+    if y < self._bbox[1]: self._bbox[1] = y
     return off, "bb_top_left(%.8gmm, %.8gmm)" % (x, y)
 
   def lay_top_left(self, n, desc=None):
-    l = self._buf[0]
+    l = self.get_layer(self._buf[0])
     off, x = self.arg_abs(1)
     off, y = self.arg_abs(off)
-    return off, "lay_top_left(%d, %.8gmm, %.8gmm)" % (l, x, y)
+    if x < self._bbox[0]: self._bbox[0] = x
+    if y < self._bbox[1]: self._bbox[1] = y
+    l['bbox'][0] = x
+    l['bbox'][1] = y
+    return off, "lay_top_left(%d, %.8gmm, %.8gmm)" % (l['n'], x, y)
 
   def bb_bot_right(self, n, desc=None):
     off, x = self.arg_abs()
     off, y = self.arg_abs(off)
+    if x > self._bbox[2]: self._bbox[2] = x
+    if y > self._bbox[3]: self._bbox[3] = y
     return off, "bb_bot_right(%.8gmm, %.8gmm)" % (x, y)
 
   def lay_bot_right(self, n, desc=None):
-    l = self._buf[0]
+    l = self.get_layer(self._buf[0])
     off, x = self.arg_abs(1)
     off, y = self.arg_abs(off)
-    return off, "lay_bot_right(%d, %.8gmm, %.8gmm)" % (l, x, y)
+    if x > self._bbox[2]: self._bbox[2] = x
+    if y > self._bbox[3]: self._bbox[3] = y
+    l['bbox'][2] = x
+    l['bbox'][3] = y
+    return off, "lay_bot_right(%d, %.8gmm, %.8gmm)" % (l['n'], x, y)
 
   def feeding(self, n, desc=None):
     off, x = self.arg_abs()
@@ -106,30 +166,48 @@ class RuidaParser():
     return off, "feeding(%.8gmm, %.8gmm)" % (x, y)
 
   def layer_speed(self, n, desc=None):
-    l = self._buf[0]
+    l = self.get_layer(self._buf[0])
     off, x = self.arg_abs(1)
-    return off, "layer_speed(%d, %.8gmm)" % (l, x)
+    l['speed'] = x
+    return off, "layer_speed(%d, %.8gmm)" % (l['n'], x)
+
+  def layer_color(self, n, desc=None):
+    l = self.get_layer(self._buf[0])
+    off, col = self.arg_abs(1)
+    l['color'] = col
+    return off, "layer_color(%d, %d)" % (l['n'], col)
 
   def laser_freq(self, n, desc=None):
-    return n, "laser_freq: " + self.skip_msg(n)
+    las = self.get_laser(self._buf[0])
+    off, x = self.arg_abs(2)
+    las['freq'] = x
+    return off, "laser_freq(%d, %.8g)" % (las['n'], x)
 
   def laser_min_pow(self, n, desc=None):
+    las = self.get_laser(desc[1])
     off, x = self.arg_perc()
-    return off, "laser_min_pow(%d, %d%%)" % (desc[1], x)
+    las['min_pow'] = x
+    return off, "laser_min_pow(%d, %d%%)" % (las['n'], x)
 
   def laser_max_pow(self, n, desc=None):
+    las = self.get_laser(desc[1])
     off, x = self.arg_perc()
-    return off, "laser_max_pow(%d, %d%%)" % (desc[1], x)
+    las['max_pow'] = x
+    return off, "laser_max_pow(%d, %d%%)" % (las['n'], x)
 
   def laser_min_pow_lay(self, n, desc=None):
     l = self._buf[0]
+    las = self.get_laser(desc[1], l)
     off, x = self.arg_perc(1)
-    return off, "laser_min_pow_lay(%d, %d, %d%%)" % (desc[1], l, x)
+    las['min_pow'] = x
+    return off, "laser_min_pow_lay(%d, %d, %d%%)" % (las['n'], l, x)
 
   def laser_max_pow_lay(self, n, desc=None):
     l = self._buf[0]
+    las = self.get_laser(desc[1], l)
     off, x = self.arg_perc(1)
-    return off, "laser_max_pow_lay(%d, %d, %d%%)" % (desc[1], l, x)
+    las['max_pow'] = x
+    return off, "laser_max_pow_lay(%d, %d, %d%%)" % (las['n'], l, x)
 
   def cut_through_pow(self, n, desc=None):
     return n, "cut_through_pow: " + self.skip_msg(n)
@@ -137,38 +215,49 @@ class RuidaParser():
   def move_abs(self, n, desc=None):
     off, x = self.arg_abs()
     off, y = self.arg_abs(off)
+    self.new_path().append([x,y])
     return off, "move_abs(%.8gmm, %.8gmm)" % (x, y)
 
   def move_rel(self, n, desc=None):
-    off, x = self.arg_rel()
-    off, y = self.arg_rel(off)
-    return off, "move_rel(%.8gmm, %.8gmm)" % (x, y)
+    off, dx = self.arg_rel()
+    off, dy = self.arg_rel(off)
+    xy = self.relative_xy(dx, dy)      # must call relative_xy() before new_path()
+    self.new_path().append(xy)
+    return off, "move_rel(%.8gmm, %.8gmm)" % (dx, dy)
 
   def cut_abs(self, n, desc=None):
     off, x = self.arg_abs()
     off, y = self.arg_abs(off)
+    self.get_path().append([x,y])
     return off, "cut_abs(%.8gmm, %.8gmm)" % (x, y)
 
   def cut_rel(self, n, desc=None):
-    off, x = self.arg_rel()
-    off, y = self.arg_rel(off)
-    return off, "cut_rel(%.8gmm, %.8gmm)" % (x, y)
+    off, dx = self.arg_rel()
+    off, dy = self.arg_rel(off)
+    self.get_path().append(self.relative_xy(dx, dy))
+    return off, "cut_rel(%.8gmm, %.8gmm)" % (dx, dy)
 
   def cut_horiz(self, n, desc=None):
-    off, x = self.arg_rel()
-    return n, "cut_horiz(%.8gmm)" % x
+    off, dx = self.arg_rel()
+    self.get_path().append(self.relative_xy(dx, 0))
+    return n, "cut_horiz(%.8gmm)" % dx
 
   def cut_vert(self, n, desc=None):
-    off, x = self.arg_rel()
-    return n, "cut_vert(%.8gmm)" % x
+    off, dy = self.arg_rel()
+    self.get_path().append(self.relative_xy(0, dy))
+    return n, "cut_vert(%.8gmm)" % dy
 
   def move_horiz(self, n, desc=None):
-    off, x = self.arg_rel()
-    return n, "move_horiz(%.8gmm)" % x
+    off, dx = self.arg_rel()
+    xy = self.relative_xy(dx, 0)
+    self.new_path().append(xy)
+    return off, "move_horiz(%.8gmm)" % dx
 
   def move_vert(self, n, desc=None):
-    off, x = self.arg_rel()
-    return n, "move_vert(%.8gmm)" % x
+    off, dy = self.arg_rel()
+    xy = self.relative_xy(0, dy)
+    self.new_path().append(xy)
+    return off, "move_vert(%.8gmm)" % dy
 
 
   rd_decoder_table = {
@@ -227,9 +316,9 @@ class RuidaParser():
         0x12: ["Blow_off"],
         0x13: ["Blow_on"],
         0x01: ["Flags_CA_01", skip_bytes, 1, "flags"],
-        0x02: ["CA_02", skip_bytes, 1, ":priority"],
+        0x02: ["Prio", layer_priority, 1, ":priority"],         # assign a current layer, for paths to follow
         0x03: ["CA_03", skip_bytes, 1],
-        0x06: ["Layer_Color", skip_bytes, 1+5, ":layer, :color"],
+        0x06: ["Layer_Color", layer_color, 1+5, ":layer, :color"],
         0x10: ["CA_10", skip_bytes, 1],
         0x22: ["Layer_Count", skip_bytes, 1],
         0x41: ["Layer_CA_41", skip_bytes, 2, ":layer, -1"]
@@ -282,7 +371,7 @@ class RuidaParser():
         0x00: ["Start0", skip_bytes, 1 ],
         0x01: ["Start1", skip_bytes, 1 ],
         0x02: ["Start2", skip_bytes, 1 ],
-        0x03: ["Laser2_Offset", laser_offset, 5+5, ":abs, :abs" ],
+        0x03: ["Laser2_Offset", laser_offset, 5+5, ":abs, :abs", 2 ],
         0x04: ["Enable_Feeding(auto?)", skip_bytes, 1, ":bool" ]
       },
     0xf2:
@@ -316,7 +405,7 @@ class RuidaParser():
     return consumed,msg
 
 
-  def decode(self):
+  def decode(self, debug=False):
     """
       go through the buffer, byte by byte, and call token methods from the rd_decoder_table identified by
       either a one byte or a two byte token.
@@ -339,28 +428,30 @@ class RuidaParser():
             out = "%5d: %02x %02x %s" % (pos, b0, b1, c[0])
             consumed,msg = self.token_method(c)
             if msg is not None: out += " " + msg;
-            print(out, file=sys.stderr)
+            if debug: print(out, file=sys.stderr)
             self._buf = self._buf[consumed:]
             pos += consumed
 
           else:
-            print("%5d: %02x %02x second byte not defined in rd_dec" % (pos, b0, self._buf[0]), file=sys.stderr)
+            if debug: print("%5d: %02x %02x second byte not defined in rd_dec" % (pos, b0, self._buf[0]), file=sys.stderr)
 
         else:
           # single byte command.
           out = "%5d: %02x %s" % (pos, b0, tok[0])
           consumed,msg = self.token_method(tok)
           if msg is not None: out += " " + msg;
-          print(out, file=sys.stderr)
+          if debug: print(out, file=sys.stderr)
           self._buf = self._buf[consumed:]
           pos += consumed
 
       else:
-        print("%5d: %02x ERROR: ----------- token not found in rd_dec" % (pos, b0), file=sys.stderr)
+        if debug: print("%5d: %02x ERROR: ----------- token not found in rd_dec" % (pos, b0), file=sys.stderr)
 
 
 p = RuidaParser(buf)
-p.decode()
+p.decode(debug=True)
+from pprint import pprint
+if True: pprint({ 'p':p._paths, 'bbox':p._bbox, 'las':p._laser}, stream=sys.stderr)
 
 ###
 
