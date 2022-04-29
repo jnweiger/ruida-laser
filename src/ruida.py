@@ -713,7 +713,7 @@ if __name__ == '__main__':
   rd.set(layer=0, color=[0,255,0], speed=100, power=[10,18], paths=paths_list_mark)
   rd.set(layer=1, color=[255,0,0], speed=30,  power=[40,70], paths=paths_list_cut)
 
-  with open('square_tri_test.rd', 'wb') as fd:
+  with open(sys.argv[1], 'wb') as fd:
     rd.write(fd)
-    print("square_tri_test.rd: odometer: ", rd._odo)
+    print(sys.argv[1] + ".rd: odometer: ", rd._odo)
 

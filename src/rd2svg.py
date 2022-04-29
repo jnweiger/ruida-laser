@@ -15,7 +15,7 @@ import sys
 from ruidaparser import RuidaParser
 
 r = RuidaParser(file=sys.argv[1])
-r.decode(debug=False)
+r.decode(debug=True)
 print(r.to_svg())
 
 if False:
