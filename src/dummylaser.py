@@ -4,15 +4,15 @@
 #
 # Prepare a loopback network like this:
 #   sudo ifconfig lo:1 192.168.2.21 up       # falafue
-#   sudo ifconfig lo:1 172.22.30.12 up       # fababnbg
+#   sudo ifconfig lo:1 172.22.30.50 up       # fababnbg
 #
 
 from __future__ import print_function
 
 import socket, sys
 
-ip_addr = '192.168.2.21'                # falafue
-# ip_addr = '172.22.30.12'                # fablabnbg
+#ip_addr = '192.168.2.21'                # falafue
+ip_addr = '172.22.30.50'                # fablabnbg
 server_port = 50200
 mtu = 1470
 
@@ -66,4 +66,5 @@ while True:
     else:
       buf = unscramble_bytes(buf)
       print("Seen: %s from %s" % (buf, addr))
-      sock.sendto(b'\xc2', addr)     # reply 0xc2=ACK
+      sock.sendto(b'\xc6', addr)     # reply 0xc6=ACK
+
