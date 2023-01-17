@@ -1,0 +1,10 @@
+# from:~/src/github/jnweiger/ruida-laser/RuidaProxy/systemd/novaprox.service
+[Unit]
+Description = start a proxy talking with client and nova laser
+After = network.target
+
+[Service]
+ExecStart = /root/scripts/novaprox-start.sh
+
+[Install]
+WantedBy = multi-user.target

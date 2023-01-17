@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#!/usr/bin/env python3
 #
 # RudiaPrody.py -- listen for incoming udp packets and forward them bidirectionally.
 # 2020 (C) juergen@fabmail.org
@@ -30,9 +30,10 @@
 #
 # 2020-02-18, v0.1, jw  - initial draught.
 # 2020-02-19, v0.2, jw  - descrambling added, but unused. We find the FIN_RAW packet as is.
+# 2022-01-17, v0.3, jw  - debugging added with hexdump
 
 
-__version__ = "0.2"
+__version__ = "0.3"
 
 
 import os, sys, time, select
@@ -40,6 +41,9 @@ from socket import *
 
 INADDR_ANY_DOTTED = '0.0.0.0'   # bind to all interfaces.
 BUSY_TIMEOUT = 10.000           # seconds. A pause that long ends a UDP Stream.
+
+debug = False
+# debug = True    # hexdump output.
 
 if sys.version_info.major < 3:
   print("Need python3 for "+sys.argv[0], flush=True)
@@ -135,6 +139,11 @@ while True:
     if last_client_ip is not None and addr[0] == proxy.dest:
       proxy.udp_frontend_port.sendto(data, (last_client_ip, proxy.CLIENT_PORT))       # forward what laser replies to client ...
       print("<", end="", flush=True)
+      if debug:
+        for c in data:
+          print("%02X " % c, end="")
+        print()
+
       if ending:
         print("]", flush=True)
         last_client_ip = None
@@ -167,6 +176,11 @@ while True:
       last_pkg_tstamp = now
       proxy.udp_backend_port.sendto(data, (proxy.dest, proxy.RUIDA_PORT))             # forward what client says to laser ...
       print(">", end="", flush=True)
+      if debug:
+        for c in data:
+          print("%02X " % c, end="")
+        print()
+
       if data == proxy.FIN_RAW:
         print("[", end="", flush=True)
         ending = True
