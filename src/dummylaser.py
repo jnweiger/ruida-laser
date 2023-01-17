@@ -10,9 +10,11 @@
 from __future__ import print_function
 
 import socket, sys
+from ruidaparser import RuidaParser
 
 #ip_addr = '192.168.2.21'                # falafue
-ip_addr = '172.22.30.50'                # fablabnbg
+#ip_addr = '172.22.30.50'                # fablabnbg
+ip_addr = '127.0.0.123'                 # RuidaDummy
 server_port = 50200
 mtu = 1470
 
@@ -56,6 +58,7 @@ print(" listening ...")
 # somebody does 
 #   sock.sendto(b"Hello World\n", (ip_addr, server_port))
 
+r = RuidaParser()
 
 while True:
     data, addr = sock.recvfrom(1024)
@@ -64,7 +67,11 @@ while True:
       print("bad checksum in %s from %s" % (data, addr))
       sock.sendto(b'\x46', addr)     # reply 0x46=NACK
     else:
+      # r.decode(buf, debug=True)         # easily explodes with: "IndexError: index out of range" line 95, decode_relcoord(): r = (x[0] << 7) + x[1]
       buf = unscramble_bytes(buf)
-      print("Seen: %s from %s" % (buf, addr))
+      for c in buf:
+        print("%02X " % c, end='')
+      print()
+      # print("Seen: %s from %s" % (buf, addr))
       sock.sendto(b'\xc6', addr)     # reply 0xc6=ACK
 

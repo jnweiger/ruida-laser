@@ -429,11 +429,13 @@ class RuidaParser():
     return consumed,msg
 
 
-  def decode(self, debug=False):
+  def decode(self, buf=None, debug=False):
     """
       go through the buffer, byte by byte, and call token methods from the rd_decoder_table identified by
       either a one byte or a two byte token.
     """
+    if buf is not None:
+       self._buf = buf
     pos = -1
     while len(self._buf):
       b0 = self._buf[0]
