@@ -431,8 +431,9 @@ class RuidaParser():
 
   def decode(self, buf=None, debug=False):
     """
-      go through the buffer, byte by byte, and call token methods from the rd_decoder_table identified by
+      Go through the buffer, byte by byte, and call token methods from the rd_decoder_table identified by
       either a one byte or a two byte token.
+      The contents of the buffer must already be unscambled.
     """
     if buf is not None:
        self._buf = buf
