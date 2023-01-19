@@ -6,6 +6,7 @@
 # 2022-02-07, v0.2, jw:       Commands added, parameter decoding wip.
 # 2022-02-08, v0.3, jw:       Add layer info to paths.
 # 2022-02-08, v1.0, jw:       Can convert square_tri_test.rd into a nice svg.
+# 2023-01-19, v1.1, jw:       Can pass a stroke_width into to_svg().
 #
 import sys
 
@@ -486,7 +487,7 @@ class RuidaParser():
     if n[-1] == '.': n = n[:-1]
     return n
 
-  def to_svg(self):
+  def to_svg(self, stroke_width=1):
     w = self.svg_number(self._bbox[2]-self._bbox[0])
     h = self.svg_number(self._bbox[3]-self._bbox[1])
     x = self.svg_number(self._bbox[0])
@@ -510,7 +511,7 @@ class RuidaParser():
       color="blue"
       if path.get('layer') and path['layer'].get('color'):
         color = path['layer']['color']
-      elems.append('<path stroke="%s" stroke-width="1" fill="none" d="%s"/>' % (color, ' '.join(d)))
+      elems.append('<path stroke="%s" stroke-width="%s" fill="none" d="%s"/>' % (color, stroke_width, ' '.join(d)))
     elems.append("</svg>")
     return "\n".join(elems)
 

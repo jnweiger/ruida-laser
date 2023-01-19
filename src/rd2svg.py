@@ -16,7 +16,7 @@ from ruidaparser import RuidaParser
 
 r = RuidaParser(file=sys.argv[1])
 r.decode(debug=True)
-print(r.to_svg())
+print(r.to_svg(stroke_width=0.1))
 
 if False:
   from pprint import pprint
