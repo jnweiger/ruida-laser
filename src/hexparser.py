@@ -45,14 +45,17 @@ if buf == "-":
 
       unscambled = hexdecode_rd(buf, with_checksum=(buf[0] == '>'))
       unscambled_hex = binascii.b2a_hex(unscambled, ' ')               #  -> b'da 01 00 04 00 00 00 04 23'
-      print('\t\t unscrambled:' + buf[0] + unscambled_hex.decode('utf-8'), flush=True)
+      print('UNSCR:' + buf[0] + unscambled_hex.decode('utf-8'), flush=True)
       try:
-        r.decode(unscambled, debug=True)
-      except:
+        r.decode(unscambled, debug=sys.stdout)
+      except Exception as e:
         print("r.decode failed\n", flush=True)
+        print(e, flush=True)
+        time.sleep(1)
         pass
     else:
-      time.sleep(0.01)
+      pass
+      # time.sleep(0.01)
 
 else:
   hexdecode_rd(buf)
