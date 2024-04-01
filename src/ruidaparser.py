@@ -246,8 +246,12 @@ class RuidaParser():
   def move_rel(self, n, desc=None):
     off, dx = self.arg_rel()
     off, dy = self.arg_rel(off)
-    xy = self.relative_xy(dx, dy)      # must call relative_xy() before new_path()
-    self.new_path().append(xy)
+    try:  
+      xy = self.relative_xy(dx, dy)      # must call relative_xy() before new_path()
+      self.new_path().append(xy)
+    except:
+      # ignore Z moves...
+      pass
     return off, "move_rel(%.8gmm, %.8gmm)" % (dx, dy)
 
   def cut_abs(self, n, desc=None):
@@ -466,7 +470,12 @@ class RuidaParser():
         else:
           # single byte command.
           out = "%5d: %02x %s" % (pos, b0, tok[0])
-          consumed,msg = self.token_method(tok)
+          try:
+            consumed,msg = self.token_method(tok)
+          except:
+            print(out + "token_method failed", tok, file=sys.stderr)
+            consumed,msg = self.token_method(tok)
+            
           if msg is not None: out += " " + msg;
           if debug: print(out, file=sys.stderr)
           self._buf = self._buf[consumed:]
