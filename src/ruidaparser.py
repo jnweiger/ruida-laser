@@ -16,7 +16,7 @@ import sys
 class RuidaParser():
   """
   """
-  def __init__(self, buf=None, file=None, debug=False):
+  def __init__(self, buf=None, file=None):
     # input
     self._buf  = buf
     self._file  = file
@@ -110,6 +110,16 @@ class RuidaParser():
     """
     return ( (x[0]<<7) + x[1] ) * 100/0x3fff
 
+  def arg_strz(self, off=0):
+    string=""
+    while self._buf[off] != 0x00:
+      string += "%c" % self._buf[off]
+      off += 1
+    return off+1, string
+
+  def arg_byte(self, off=0):
+    return off+1, self._buf[off]
+
   def arg_perc(self, off=0):
     buf = self._buf[off:off+2]
     return off+2, int( self.decode_percent_float(buf) + .5 )
@@ -144,8 +154,10 @@ class RuidaParser():
           - desc[0] is ignored (description string, later printed by token_method() )
           - desc[1:] are either
                 - integers, bytes to simply skip before/between decode_*() calls.
-                - or one of arg_abs, arg_rel, arg_perc_f
+                - or one of arg_abs, arg_rel, arg_perc_f, arg_strz, arg_byte
                   to fill an array printed in '[...]' with decoded values.
+                - if given, the sum of the skips and arg_*() consumptions
+                  is returned as the total buffer consumption. (n otherwise)
     """
     buf = self._buf
     r = []
@@ -161,19 +173,26 @@ class RuidaParser():
         if type(arg) == type(0):
           off += arg
         else:
-          n, val = arg(self, off)
+          val = None
+          try:
+            n, val = arg(self, off)
+          except Exception as e:
+            import traceback
+            print(str(desc))    # in case we need to debug, what it is..
+            traceback.print_exc()
           # v.append(str(buf[off:n])+str(val))
           v.append(val)
           off = n
-      r.append("=>"+str(v))
-    return " ".join(r)
+      if len(v): r.append("=>"+str(v))
+      if len(desc) > 1:
+        n = off
+    return n, " ".join(r)
 
   def t_skip_bytes(self, n, desc=None):
     """
-        parameter: see skip_msg used by skip_msg:
+        parameters: see skip_msg()
     """
-    return n, self.skip_msg(n, desc)
-
+    return self.skip_msg(n, desc)
 
   def t_layer_priority(self, n, desc=None):
     l = self._buf[0]
@@ -272,7 +291,8 @@ class RuidaParser():
     return off, "t_laser_max_pow_lay(%d, %d, %d%%)" % (las['n'], l, x)
 
   def t_cut_through_pow(self, n, desc=None):
-    return n, "t_cut_through_pow: " + self.skip_msg(n, desc)
+    n, msg = self.skip_msg(n, desc)
+    return n, "t_cut_through_pow: " + msg
 
   def t_move_abs(self, n, desc=None):
     off, x = self.arg_abs()
@@ -335,12 +355,12 @@ class RuidaParser():
     0xa9: ["Cut_Rel",   t_cut_rel, 2+2, ":rel, :rel" ],
     0xaa: ["Cut_Horiz", t_cut_horiz, 2, ":rel" ],
     0xab: ["Cut_Vert",  t_cut_vert, 2, ":rel" ],
-    0xc0: ["C0", t_skip_bytes, 2 ],
-    0xc1: ["C1", t_skip_bytes, 2 ],
-    0xc2: ["C2", t_skip_bytes, 2 ],
-    0xc3: ["C3", t_skip_bytes, 2 ],
-    0xc4: ["C4", t_skip_bytes, 2 ],
-    0xc5: ["C5", t_skip_bytes, 2 ],
+    0xc0: ["Unknown_C0", t_skip_bytes, 2 ],
+    0xc1: ["Unknown_C1", t_skip_bytes, 2 ],
+    0xc2: ["Unknown_C2", t_skip_bytes, 2 ],
+    0xc3: ["Unknown_C3", t_skip_bytes, 2 ],
+    0xc4: ["Unknown_C4", t_skip_bytes, 2 ],
+    0xc5: ["Unknown_C5", t_skip_bytes, 2 ],
     0xc6:
       {
         0x01: ["Laser_1_Min_Pow_C6_01", t_laser_min_pow, 2, ":power", 1],
@@ -349,11 +369,11 @@ class RuidaParser():
         0x06: ["Laser_3_Max_Pow_C6_06", t_laser_max_pow, 2, ":power", 3],
         0x07: ["Laser_4_Min_Pow_C6_07", t_laser_min_pow, 2, ":power", 4],
         0x08: ["Laser_4_Max_Pow_C6_08", t_laser_max_pow, 2, ":power", 4],
-        0x10: ["Dot time", t_skip_bytes, 5, ":sec"],
-        0x12: ["Cut_Open_delay_12",  t_skip_bytes, 5, ":ms"],
-        0x13: ["Cut_Close_delay_13", t_skip_bytes, 5, ":ms"],
-        0x15: ["Cut_Open_delay_15",  t_skip_bytes, 5, ":ms"],
-        0x16: ["Cut_Close_delay_16", t_skip_bytes, 5, ":ms"],
+        0x10: ["Dot time", t_skip_bytes, 5, ":sec", arg_abs],
+        0x12: ["Cut_Open_delay_12",  t_skip_bytes, 5, ":ms", arg_abs],
+        0x13: ["Cut_Close_delay_13", t_skip_bytes, 5, ":ms", arg_abs],
+        0x15: ["Cut_Open_delay_15",  t_skip_bytes, 5, ":ms", arg_abs],
+        0x16: ["Cut_Close_delay_16", t_skip_bytes, 5, ":ms", arg_abs],
         0x21: ["Laser_2_Min_Pow_C6_21", t_laser_min_pow, 2, ":power", 2],
         0x22: ["Laser_2_Max_Pow_C6_22", t_laser_max_pow, 2, ":power", 2],
         0x31: ["Laser_1_Min_Pow_C6_31", t_laser_min_pow_lay, 1+2, ":layer, :power", 1],
@@ -370,12 +390,13 @@ class RuidaParser():
         0x56: ["Cut_through_power4", t_cut_through_pow, 2, ":power", 4],
         0x60: ["Laser_Freq", t_laser_freq, 1+1+5, ":laser, 0x00, :freq" ]
       },
-    0xc7: ["C7", t_skip_bytes, 2 ],
-    0xc8: ["C8", t_skip_bytes, 2 ],
+    0xc7: ["Unkown_C7", t_skip_bytes, 2 ],
+    0xc8: ["Unkown_C8", t_skip_bytes, 2 ],
     0xc9:
       {
         0x02: ["Speed_C9_02", t_skip_bytes, 5, ":speed", arg_abs ],
-        0x04: ["Layer_Speed", t_layer_speed, 1+5, ":layer, :speed" ]
+        0x03: ["Unknown_C9_03", t_skip_bytes, 5, "??", arg_abs ],
+        0x04: ["Layer_Speed", t_layer_speed, 1+5, ":layer, :speed" ],
       },
     0xca:
       {
@@ -383,9 +404,9 @@ class RuidaParser():
         0x13: ["Blow_on"],
         0x01: ["Flags_CA_01", t_skip_bytes, 1, "flags"],
         0x02: ["Prio", t_layer_priority, 1, ":priority"],         # assign a current layer, for paths to follow
-        0x03: ["CA_03", t_skip_bytes, 1],
+        0x03: ["Unkown_CA_03", t_skip_bytes, 1],
         0x06: ["Layer_Color", t_layer_color, 1+5, ":layer, :color"],
-        0x10: ["CA_10", t_skip_bytes, 1],
+        0x10: ["Unkown_CA_10", t_skip_bytes, 1],
         0x22: ["Layer_Count", t_skip_bytes, 1],
         0x41: ["Layer_CA_41", t_skip_bytes, 2, ":layer, -1"]
       },
@@ -394,6 +415,7 @@ class RuidaParser():
     0xd8:
       {
         0x00: ["Light_RED"],
+        0x11: ["Unknown_D8_11 ?direct exec?"],
         0x12: ["UploadFollows"],
       },
     0xd9:
@@ -405,34 +427,40 @@ class RuidaParser():
     0xda:
       {
         0x00: ["Work_Interval query", t_skip_bytes, 2],
-        0x01: ["Work_Interval resp1", t_skip_bytes, 2+5],
+        0x01: ["Work_Interval resp1", t_skip_bytes, 2+5, "??", 2, arg_abs, arg_abs],
         0x02: ["Work_Interval resp2", t_skip_bytes, 2+5+5, ":meter, :meter", 2, arg_abs, arg_abs ],
+      },
+    0xe5:
+      {
+        0x05: ["Unkown_E5_05", t_skip_bytes, 5, "??", arg_abs]
       },
     0xe6:
       {
-        0x01: ["E6_01"]
+        0x01: ["Unkown_E6_01"]
       },
     0xe7:
       {
         0x00: ["Stop"],
-        0x01: ["SetFilename", t_skip_bytes, 0, ":string"],
+        0x01: ["SetFilename", t_skip_bytes, 0, ":strz", arg_strz],
         0x03: ["Bounding_Box_Top_Left", t_bb_top_left, 5+5, ":abs, :abs"],
-        0x04: ["E7 04", t_skip_bytes, 4+5+5, ":abs, :abs"],
-        0x05: ["E7_05", t_skip_bytes, 1],
+        0x04: ["Unkown_E7_04", t_skip_bytes, 4+5+5, ":abs, :abs", 4, arg_abs, arg_abs],
+        0x05: ["Unkown_E7_05", t_skip_bytes, 1],
         0x06: ["Feeding", t_feeding, 5+5, ":abs, :abs"], # Feeding1, Distance+Feeding2
         0x07: ["Bounding_Box_Bottom_Right", t_bb_bot_right, 5+5, ":abs, :abs"],
-        0x08: ["Bottom_Right_E7_08", t_skip_bytes, 4+5+5, ":abs, :abs"],
-        0x13: ["E7 13", t_skip_bytes, 5+5, ":abs, :abs"],
-        0x17: ["Bottom_Right_E7_17", t_skip_bytes, 5+5, ":abs, :abs"],
-        0x23: ["E7 23", t_skip_bytes, 5+5, ":abs, :abs"],
-        0x24: ["E7 24", t_skip_bytes, 1],
+        0x08: ["Bottom_Right_E7_08", t_skip_bytes, 4+5+5, ":abs, :abs", 4, arg_abs, arg_abs],
+        0x13: ["Unkown_E7_13", t_skip_bytes, 5+5, ":abs, :abs", arg_abs, arg_abs],
+        0x17: ["Bottom_Right_E7_17", t_skip_bytes, 5+5, ":abs, :abs", arg_abs, arg_abs],
+        0x23: ["Unkown_E7_23", t_skip_bytes, 5+5, ":abs, :abs", arg_abs, arg_abs],
+        0x24: ["Unkown_E7_24", t_skip_bytes, 1],
+        0x37: ["Unkown_E7_37", t_skip_bytes, 5+5, "??", arg_abs, arg_abs],
+        0x38: ["Unkown_E7_38", t_skip_bytes, 1],
         0x50: ["Bounding_Box_Top_Left", t_bb_top_left, 5+5, ":abs, :abs"],
         0x51: ["Bounding_Box_Bottom_Right", t_bb_bot_right, 5+5, ":abs, :abs"],
         0x52: ["Layer_Top_Left_E7_52", t_lay_top_left, 1+5+5, ":layer, :abs, :abs"],
         0x53: ["Layer_Bottom_Right_E7_53", t_lay_bot_right, 1+5+5, ":layer, :abs, :abs"],
-        0x54: ["Pen_Draw_Y", t_skip_bytes, 1+5, ":layer, :abs"],
-        0x55: ["Laser_Y_Offset", t_skip_bytes, 1+5, ":layer, :abs"],
-        0x60: ["E7 60", t_skip_bytes, 1],
+        0x54: ["Pen_Draw_Y", t_skip_bytes, 1+5, ":layer, :abs", arg_byte, arg_abs],
+        0x55: ["Laser_Y_Offset", t_skip_bytes, 1+5, ":layer, :abs", arg_byte, arg_abs],
+        0x60: ["Unkown_E7_60", t_skip_bytes, 1],
         0x61: ["Layer_Top_Left_E7_61", t_lay_top_left, 1+5+5, ":layer, :abs, :abs"],
         0x62: ["Layer_Bottom_Right_E7_62", t_lay_bot_right, 1+5+5, ":layer, :abs, :abs"]
       },
@@ -441,7 +469,7 @@ class RuidaParser():
         0x01: ["FileStore", t_skip_bytes, 1+1, "0x00, :number, :string" ],
         0x02: ["PrepFilename"],
       },
-    0xea: ["EA", t_skip_bytes, 1],
+    0xea: ["Unkown_EA", t_skip_bytes, 1],
     0xeb: ["Finish"],
     0xf0: ["Magic88"],
     0xf1:
@@ -454,14 +482,14 @@ class RuidaParser():
       },
     0xf2:
       {
-        0x00: ["F2 00", t_skip_bytes, 1 ],
-        0x01: ["F2 01", t_skip_bytes, 1 ],
-        0x02: ["F2 02", t_skip_bytes, 10 ],
-        0x03: ["F2 03", t_skip_bytes, 5+5, ":abs, :abs" ],
-        0x04: ["Bottom_Right_F2_04", t_skip_bytes, 5+5, ":abs, :abs" ],
-        0x05: ["Bottom_Right_F2_05", t_skip_bytes, 4+5+5, "-4, :abs, :abs" ],
-        0x06: ["F2 06", t_skip_bytes, 5+5, ":abs, :abs" ],
-        0x07: ["F2 07", t_skip_bytes, 1 ]
+        0x00: ["Unkown_F2_00", t_skip_bytes, 1 ],
+        0x01: ["Unkown_F2_01", t_skip_bytes, 1 ],
+        0x02: ["Unkown_F2_02", t_skip_bytes, 10, "??", arg_abs, arg_abs],
+        0x03: ["Unkown_F2_03", t_skip_bytes, 5+5, ":abs, :abs", arg_abs, arg_abs],
+        0x04: ["Bottom_Right_F2_04", t_skip_bytes, 5+5, ":abs, :abs", arg_abs, arg_abs],
+        0x05: ["Bottom_Right_F2_05", t_skip_bytes, 4+5+5, "4, :abs, :abs", 4, arg_abs, arg_abs],
+        0x06: ["Unkown_F2_06", t_skip_bytes, 5+5, ":abs, :abs", arg_abs, arg_abs],
+        0x07: ["Unkown_F2_07", t_skip_bytes, 1 ]
       }
   }
 
@@ -542,7 +570,7 @@ class RuidaParser():
           except:
             print(out + "token_method failed", tok, file=debugfile)
             consumed,msg = self.token_method(tok)
-            
+
           if msg is not None: out += " " + msg;
           if debug: print(out, file=debugfile)
           self._buf = self._buf[consumed:]
@@ -591,3 +619,8 @@ class RuidaParser():
     elems.append("</svg>")
     return "\n".join(elems)
 
+if __name__ == '__main__':
+  # load a .rd file
+  r = RuidaParser(file=sys.argv[1])
+  # dump a crude disassembly
+  r.decode(debug=True)
