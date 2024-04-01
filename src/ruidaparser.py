@@ -9,6 +9,7 @@
 # 2023-01-19, v1.1, jw:       Can pass a stroke_width into to_svg().
 # 2024-04-01, v1.2, jw:       Prefixed all token metods with t_
 #                             Allow decode params in skip_msg()
+#                             Added Direct_Move_Z_rel & friends.
 #
 import sys
 
@@ -394,6 +395,12 @@ class RuidaParser():
       {
         0x00: ["Light_RED"],
         0x12: ["UploadFollows"],
+      },
+    0xd9:
+      {
+        0x00: ["Direct_Move_X_rel ", t_skip_bytes, 1+5, ":mm", 1, arg_abs],
+        0x01: ["Direct_Move_Y_rel ", t_skip_bytes, 1+5, ":mm", 1, arg_abs],
+        0x02: ["Direct_Move_Z_rel ", t_skip_bytes, 1+5, ":mm", 1, arg_abs],
       },
     0xda:
       {
