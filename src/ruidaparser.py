@@ -11,6 +11,8 @@
 #                             Allow decode params in skip_msg()
 #                             Added Direct_Move_Z_rel & friends.
 #
+# TODO: implement all codes seen in https://edutechwiki.unige.ch/en/Ruida
+#
 import sys
 
 class RuidaParser():
