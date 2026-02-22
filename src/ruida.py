@@ -38,8 +38,10 @@
 # 2017-12-18, jw@fabmail.org
 #     v1.6 -- encode_byte() encode_color() added.
 #             multi layer support in header() and body() done.
+# 2026-02-22, jw@fabmail.org, v1.7 - added RuidaUdp class
 
 import sys, re, math, copy
+import os, time, socket
 
 # python2 has a completely useless alias bytes = str. Fix this:
 if sys.version_info.major < 3:
@@ -643,6 +645,90 @@ class Ruida():
     str = re.sub('#.*$','', str, flags=re.MULTILINE)    # weed out comments.
     l = map(lambda x: int(x, base=16), str.split())     # locale.atoi() is to be avoided!
     return bytes(l)
+
+
+class RuidaUdp():
+  NETWORK_TIMEOUT = 3000        # msecs
+  INADDR_ANY_DOTTED = '0.0.0.0'  # bind to all interfaces.
+  SOURCE_PORT = 40200     # used by rdworks in Windows
+  DEST_PORT   = 50200     # Ruida Board
+  MTU = 1470              # max data length per datagram (minus checksum)
+  verbose = False         # True: babble while working
+  chunkpause = 0.0        # 1.5        # seconds to wait between chunks. debugging only.
+  ACK = b'\xc6'           # one byte 0xc6: expected response from send().
+
+
+  def __init__(self, host, port=DEST_PORT, localport=SOURCE_PORT, verbose=verbose):
+    self.verbose = verbose
+    self.sock = socket.socket(AF_INET, SOCK_DGRAM)
+    self.sock.bind((self.INADDR_ANY_DOTTED, localport))
+    self.sock.connect((host, port))
+    self.sock.settimeout(self.NETWORK_TIMEOUT * 0.001)
+    # timeval = struct.pack('ll', 2, 100)
+    # self.sock.setsockopt(SOL_SOCKET, SO_RCVTIMEO, timeval)
+
+
+  def checksum(self, data, start, length):
+    cs = sum(data[start:start+length])
+    b1 = cs & 0xff
+    b0 = (cs>>8) & 0xff
+    return bytes([b0,b1])
+
+
+  # splits data in chunks that fit into MTU, sends each chunk, expecting ACK
+  # if something else than ACK was received, the recevived data is returned.
+  # If all chunks receive ACK, write() returns None.
+  def write(self, data):
+    start = 0
+    l = len(data)
+    while start < l:
+      chunk_sz = l - start
+      if chunk_sz > self.MTU:
+        chunk_sz = self.MTU
+      chksum = self.checksum(data, start, chunk_sz)
+      buf = chksum + data[start:start+chunk_sz]
+      r = self.send(buf, retry=(start == 0))
+      if r =! self.ACK:
+        return r
+      start += chunk_sz
+    return None
+
+
+  # sends a packet, and receives a response
+  #  0x46: 'F' -> retry send, if retry==True else  raise an IOError.
+  #  0xc6:  Ack.
+  def send(self, ary, retry=False):
+    if self.chunkpause > 0.0:
+      time.sleep(self.chunkpause)
+
+    retry_delay_sec = 0.2
+    retry_delay_sec_max = 5.0
+    while True:
+      self.sock.send(ary)
+      try:
+        data = self.sock.recv(8)     # timeout raises an exception
+      except Exception as e:
+        print("RuidaUdp.send (sock recv)", e)
+        break
+      l = len(data)
+      if l == 0:
+        if self.verbose: print("received nothing (empty)")
+        break
+      # l == 1
+      if data[0] == 0x46:           # 'F'
+        if retry:
+          if self.verbose: print("retrying ...")
+          time.sleep(retry_delay_sec)   # truncated binary backoff
+          if retry_delay_sec < retry_delay_sec_max: retry_delay_sec *= 2
+        else:
+          raise IOError("'F': checksum error?", str(data))
+      elif data[0] == self.ACK[0]:     # 0xc6, should we also check length?
+        if self.verbose: print("received ACK");
+        break
+      else:
+        print("unknown response %02x\n" % data[0])
+        break
+    return data
 
 
 if __name__ == '__main__':
